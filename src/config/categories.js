@@ -5,9 +5,8 @@
 //   1. Copy any block below (from the opening { to the closing },)
 //   2. Paste it before the closing ] of the CATEGORIES array
 //   3. Change the id, label, description, and color
-//   4. Save the file — that's it. The new category appears everywhere.
+//   4. Save — it appears everywhere automatically.
 //
-// Color tips: use a hex color that feels distinct from the others.
 // The id must be lowercase with underscores only (no spaces).
 // ═══════════════════════════════════════════════════════════════════
 
@@ -18,7 +17,7 @@ export const CATEGORIES = [
     id: 'nursery',
     label: 'Nursery',
     description: 'General plant nurseries and retail garden suppliers',
-    color: '#3d6b4a',
+    color: '#2d5a3d',
   },
 
   // ─── Rare Plants ──────────────────────────────────────────────
@@ -26,7 +25,7 @@ export const CATEGORIES = [
     id: 'rare_plants',
     label: 'Rare Plants',
     description: 'Specialty vendors for rare, exotic, and collector plants',
-    color: '#7c4a2a',
+    color: '#5a3d1e',
   },
 
   // ─── Testing & Analysis ───────────────────────────────────────
@@ -34,17 +33,17 @@ export const CATEGORIES = [
     id: 'testing_analysis',
     label: 'Testing & Analysis',
     description: 'Lab testing, soil analysis, water quality, plant diagnostics',
-    color: '#2a4a7c',
+    color: '#1e3d5a',
   },
 
   // ─── ADD NEW CATEGORIES ABOVE THIS LINE ───────────────────────
-  // Example of a new category — uncomment and modify to use:
+  // Example — uncomment and modify to use:
   //
   // {
   //   id: 'tools_equipment',
   //   label: 'Tools & Equipment',
   //   description: 'Farming tools, irrigation systems, greenhouse supplies',
-  //   color: '#5a5a3a',
+  //   color: '#4a4a2a',
   // },
 
 ]
@@ -56,8 +55,8 @@ export const CATEGORIES = [
 // To add a new rating dimension:
 //   1. Copy any block below
 //   2. Paste it before the closing ] of the RATING_DIMS array
-//   3. Change the id and label
-//   4. Save — the new dimension appears on all review forms and cards.
+//   3. Change the id, label, and hint
+//   4. Save — appears on all field report forms automatically.
 //
 // The id must be lowercase with underscores only.
 // ═══════════════════════════════════════════════════════════════════
