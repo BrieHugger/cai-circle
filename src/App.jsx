@@ -3,6 +3,16 @@ import { supabase } from './config/supabase'
 import { CATEGORIES, RATING_DIMS } from './config/categories'
 import L from 'leaflet'
 
+// ─── Invite Link Router ─────────────────────────────────────────
+// The invite code is set in your .env as VITE_INVITE_CODE
+// Share the URL: yourcaiapp.vercel.app/join/YOUR_CODE
+// Change the code anytime to invalidate old links
+const INVITE_CODE = import.meta.env.VITE_INVITE_CODE || 'cai2026'
+const path = window.location.pathname
+const isInvitePath = path.startsWith('/join/')
+const inviteCodeFromUrl = path.split('/join/')[1]
+const VALID_INVITE = isInvitePath && inviteCodeFromUrl === INVITE_CODE
+
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -143,6 +153,7 @@ export default function App() {
 
   const filteredVendors = vendors.filter(v => filterCat === 'all' || v.category === filterCat)
 
+  if (!session && VALID_INVITE) return <SignUpScreen dark={dark} setDark={setDark} />
   if (!session) return <AuthScreen dark={dark} setDark={setDark} />
 
   return (
@@ -248,6 +259,87 @@ function AuthScreen({ dark, setDark }) {
           CAI Circle is a private community tool.<br />
           Contact your CAI administrator to get access.
         </p>
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={() => setDark(d => !d)}>
+            {dark ? '☀ Light mode' : '☽ Dark mode'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIGN UP SCREEN — only accessible via invite link
+// ═══════════════════════════════════════════════════════════════
+function SignUpScreen({ dark, setDark }) {
+  const [username, setUser] = useState('')
+  const [password, setPass] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError]   = useState('')
+  const [success, setSuccess] = useState(false)
+  const [busy, setBusy]     = useState(false)
+
+  async function handleSignUp(e) {
+    e.preventDefault(); setError(''); setBusy(true)
+    if (username.length < 3) { setError('Username must be at least 3 characters.'); setBusy(false); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); setBusy(false); return }
+    if (password !== confirm) { setError('Passwords do not match.'); setBusy(false); return }
+    const { error } = await supabase.auth.signUp({
+      email: toEmail(username), password,
+      options: { data: { username } }
+    })
+    if (error) { setError(error.message); setBusy(false); return }
+    setSuccess(true)
+    setBusy(false)
+  }
+
+  if (success) return (
+    <div className="auth-screen" data-theme={dark ? 'dark' : ''}>
+      <div className="auth-card">
+        <div className="auth-logo">
+          <span className="logo-sub">Friends of</span>
+          <span className="logo-name">CAI Circle</span>
+        </div>
+        <div className="success-msg" style={{ textAlign: 'center', marginBottom: 16 }}>
+          ✓ Account created! You can now sign in.
+        </div>
+        <button className="btn btn-primary" style={{ width: '100%' }}
+          onClick={() => window.location.href = '/'}>
+          Go to Sign In
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="auth-screen" data-theme={dark ? 'dark' : ''}>
+      <div className="auth-card">
+        <div className="auth-logo">
+          <span className="logo-sub">Friends of</span>
+          <span className="logo-name">CAI Circle</span>
+        </div>
+        <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--mut)', marginBottom: 24 }}>
+          You've been invited to join CAI Circle.<br />Create your account below.
+        </p>
+        {error && <div className="error-msg">{error}</div>}
+        <form onSubmit={handleSignUp}>
+          <div className="field">
+            <label>Choose a Username</label>
+            <input value={username} onChange={e => setUser(e.target.value)} placeholder="your_name" required autoFocus />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input type="password" value={password} onChange={e => setPass(e.target.value)} placeholder="At least 6 characters" required />
+          </div>
+          <div className="field">
+            <label>Confirm Password</label>
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat password" required />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 4 }} disabled={busy}>
+            {busy ? 'Creating account…' : 'Create Account'}
+          </button>
+        </form>
         <div style={{ textAlign: 'center', marginTop: 16 }}>
           <button className="btn btn-secondary" onClick={() => setDark(d => !d)}>
             {dark ? '☀ Light mode' : '☽ Dark mode'}
