@@ -41,6 +41,7 @@
 
     html, body { min-height: 100%; background: var(--bg); color: var(--tx); font-family: var(--bf); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
     #screen-app { min-height: 100vh; background: var(--bg); }
+    #view-map { width:100%; }
     h1,h2,h3 { font-family: var(--hf); }
     button { cursor: pointer; font-family: var(--bf); }
     input, select, textarea { font-family: var(--bf); }
@@ -128,8 +129,8 @@
     .sec-title-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 
     /* Map */
-    .map-wrap { display:flex; height:calc(100vh - 54px); }
-    #map { flex:1; min-width:0; min-height:0; z-index:0; }
+    .map-wrap { display:flex; height:calc(100vh - 54px); width:100%; overflow:hidden; }
+    #map { flex:1; min-width:0; min-height:0; z-index:0; width:100%; }
     .map-sidebar { width:260px; flex-shrink:0; background:var(--surf); border-left:1px solid var(--bdr); overflow-y:auto; display:flex; flex-direction:column; }
     .map-sidebar-head { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--mut); padding:12px 16px; border-bottom:1px solid var(--bdr); flex-shrink:0; }
     .map-sidebar-item { padding:10px 16px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .1s; }
@@ -211,23 +212,6 @@
       </div>
     </div>
 
-    <!-- Map View -->
-    <div id="view-map" class="hidden">
-      <div class="map-wrap">
-        <div id="map">
-          <div style="position:absolute;top:10px;left:10px;z-index:1000;display:flex;gap:4px">
-            <button onclick="setMapTile('light')" id="tile-light" style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Light</button>
-            <button onclick="setMapTile('dark')"  id="tile-dark"  style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Dark</button>
-            <button onclick="setMapTile('sat')"   id="tile-sat"   style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Satellite</button>
-          </div>
-        </div>
-        <div class="map-sidebar">
-          <div class="map-sidebar-head" id="map-sidebar-count">All Vendors</div>
-          <div id="map-sidebar-list"></div>
-        </div>
-      </div>
-    </div>
-
     <!-- Detail View -->
     <div id="view-detail" class="hidden">
       <button class="back-btn" id="btn-back">← Back</button>
@@ -242,6 +226,23 @@
         <button class="btn btn-sm" id="btn-detail-report">+ File a Report</button>
       </div>
       <div id="detail-reports"></div>
+    </div>
+  </div>
+
+  <!-- Map View — outside .main so it fills full width -->
+  <div id="view-map" class="hidden">
+    <div class="map-wrap">
+      <div id="map">
+        <div style="position:absolute;bottom:24px;left:10px;z-index:1000;display:flex;gap:4px">
+          <button onclick="setMapTile('light')" id="tile-light" style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Light</button>
+          <button onclick="setMapTile('dark')"  id="tile-dark"  style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Dark</button>
+          <button onclick="setMapTile('sat')"   id="tile-sat"   style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Satellite</button>
+        </div>
+      </div>
+      <div class="map-sidebar">
+        <div class="map-sidebar-head" id="map-sidebar-count">All Vendors</div>
+        <div id="map-sidebar-list"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -426,6 +427,9 @@ function showView(n) {
   if (n !== 'detail') prevView = n;
   currentView = n;
   ['list','map','detail'].forEach(v => { v===n ? show(`view-${v}`) : hide(`view-${v}`); });
+  // .main visibility — hide when map is showing
+  const mainEl = document.querySelector('.main');
+  if (mainEl) mainEl.style.display = n==='map' ? 'none' : '';
 }
 
 // ── Modal helpers ─────────────────────────────────────────────────
