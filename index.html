@@ -414,7 +414,7 @@ const hideErr = id => hide(id);
 let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
-let avLat=null, avLng=null;
+let avLat=null, avLng=null, avLocality=null;
 
 // ── Theme ─────────────────────────────────────────────────────────
 let dark = localStorage.getItem('cai-theme')==='dark';
@@ -504,15 +504,15 @@ async function loadVendors() {
 function parseLocation(address) {
   if (!address) return null;
   const parts = address.split(',').map(p => p.trim()).filter(Boolean);
-  // Filter out: pure numbers (zip), country names, 2-letter state codes + zip
+  // Filter out: zip codes, state codes, country names, and Google Plus Codes (e.g. ABCD+EFG)
   const meaningful = parts.filter(p =>
     !/^\d+$/.test(p) &&                    // not a zip code
     !/^[A-Z]{2}(\s+\d+)?$/.test(p) &&     // not a state code like "PR" or "PR 00646"
+    !/^[A-Z0-9]{4}\+[A-Z0-9]+$/.test(p) && // not a Plus Code like ABCD+EFG
     !['USA','United States','Puerto Rico','Costa Rica','Dominican Republic'].includes(p)
   );
-  // Return second-to-last meaningful part (skip street address, take city)
-  if (meaningful.length >= 2) return meaningful[meaningful.length - 2];
-  if (meaningful.length === 1) return meaningful[0];
+  // Return the LAST meaningful part — that's always the city
+  if (meaningful.length >= 1) return meaningful[meaningful.length - 1];
   return null;
 }
 
@@ -534,7 +534,7 @@ function renderGrid() {
   if (!f.length) { $('vendor-grid').innerHTML='<div class="empty">No vendors yet — add the first one!</div>'; return; }
   $('vendor-grid').innerHTML = f.map(v => {
     const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
-    const loc = parseLocation(v.address);
+    const loc = v.locality || parseLocation(v.address);
     const hasScore = v.avgScore !== undefined && v.avgScore !== null;
     const scoreCol = hasScore ? scoreColor(v.avgScore) : 'var(--mut)';
     return `<div class="vendor-card" data-id="${v.id}">
@@ -618,14 +618,14 @@ $('btn-detail-report').onclick = () => openFieldReport(selectedVendor);
 $('btn-add-vendor').onclick = () => {
   hideErr('add-vendor-error');
   ['av-name','av-phone','av-website','av-address','av-google-search'].forEach(id => $(id).value='');
-  avLat=null; avLng=null;
+  avLat=null; avLng=null; avLocality=null;
   hide('av-coords-status');
   openModal('modal-add-vendor');
   // Initialize Google Places Autocomplete
   if (window.google && window.google.maps && window.google.maps.places) {
     const input = $('av-google-search');
     const ac = new google.maps.places.Autocomplete(input, {
-      fields: ['name','formatted_address','formatted_phone_number','website','geometry'],
+      fields: ['name','formatted_address','formatted_phone_number','website','geometry','address_components'],
     });
     ac.addListener('place_changed', () => {
       const place = ac.getPlace();
@@ -638,6 +638,14 @@ $('btn-add-vendor').onclick = () => {
         avLng = place.geometry.location.lng();
         $('av-coords-status').textContent = `📍 Location captured: ${avLat.toFixed(4)}, ${avLng.toFixed(4)}`;
         $('av-coords-status').classList.remove('hidden');
+      }
+      // Extract locality directly from structured components — no parsing needed
+      if (place.address_components) {
+        avLocality =
+          place.address_components.find(c => c.types.includes('locality'))?.long_name ||
+          place.address_components.find(c => c.types.includes('sublocality'))?.long_name ||
+          place.address_components.find(c => c.types.includes('administrative_area_level_2'))?.long_name ||
+          null;
       }
     });
   }
@@ -653,24 +661,27 @@ $('av-submit').onclick = async () => {
   try {
     const ref = await addDoc(collection(db,'vendors'), {
       name, category:cat,
-      phone:   $('av-phone').value.trim()||null,
-      website: $('av-website').value.trim()||null,
-      address: $('av-address').value.trim()||null,
-      lat:     avLat||null,
-      lng:     avLng||null,
+      phone:    $('av-phone').value.trim()||null,
+      website:  $('av-website').value.trim()||null,
+      address:  $('av-address').value.trim()||null,
+      locality: avLocality||null,
+      lat:      avLat||null,
+      lng:      avLng||null,
       flagged: false, createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
-    const savedLat = avLat, savedLng = avLng;
+    const savedLat = avLat, savedLng = avLng, savedLocality = avLocality;
     const savedPhone = $('av-phone').value.trim()||null;
     const savedWebsite = $('av-website').value.trim()||null;
     const savedAddress = $('av-address').value.trim()||null;
-    avLat=null; avLng=null;
+    avLat=null; avLng=null; avLocality=null;
     vendors.push({id:ref.id, name, category:cat, flagged:false,
       phone:savedPhone, website:savedWebsite, address:savedAddress,
-      lat:savedLat, lng:savedLng
+      locality:savedLocality, lat:savedLat, lng:savedLng
     });
     vendors.sort((a,b)=>a.name.localeCompare(b.name));
     renderGrid();
+    renderMapPins();
+    renderMapSidebar();
     closeModal('modal-add-vendor');
   } catch(e) { showErr('add-vendor-error',e.message); }
   $('av-submit').disabled = false;
@@ -837,6 +848,7 @@ window.switchView = function(v) {
 function initMap() {
   if (leafletMap) {
     leafletMap.invalidateSize();
+    renderMapPins();
     renderMapSidebar();
     return;
   }
@@ -846,8 +858,13 @@ function initMap() {
   renderMapSidebar();
 }
 
+let mapMarkers = [];
+
 function renderMapPins() {
   if (!leafletMap) return;
+  // Clear existing markers
+  mapMarkers.forEach(m => m.remove());
+  mapMarkers = [];
   vendors.forEach(v => {
     if (!v.lat || !v.lng) return;
     const cat = CATEGORIES.find(c=>c.id===v.category)||{color:'#888'};
@@ -856,12 +873,13 @@ function renderMapPins() {
       html: `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${cat.color};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
       iconSize: [26,26], iconAnchor: [13,26],
     });
-    L.marker([v.lat, v.lng], {icon}).addTo(leafletMap)
+    const marker = L.marker([v.lat, v.lng], {icon}).addTo(leafletMap)
       .bindPopup(`<div style="font-family:'Old Standard TT',serif;min-width:130px">
         <strong>${v.name}</strong><br>
         <span style="color:${cat.color};font-size:11px;text-transform:uppercase">${cat.label||''}</span>
       </div>`)
       .on('click', () => { openDetail(v); switchView('detail'); });
+    mapMarkers.push(marker);
   });
 }
 
