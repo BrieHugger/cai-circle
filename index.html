@@ -276,14 +276,14 @@
         <div class="field">
           <label>Would you work with this vendor again?</label>
           <div style="display:flex;gap:20px;margin-top:6px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-rec" value="yes" checked /> Yes</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-rec" value="yes" /> Yes</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-rec" value="no" /> No</label>
           </div>
         </div>
         <div class="field">
           <label>This vendor aligns with permaculture values</label>
           <div style="display:flex;gap:20px;margin-top:6px">
-            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-perm" value="yes" checked /> Yes</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-perm" value="yes" /> Yes</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-perm" value="no" /> No</label>
             <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer"><input type="radio" name="fr-perm" value="unsure" /> Unsure</label>
           </div>
@@ -291,7 +291,6 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" id="fr-back-btn" style="margin-right:auto;display:none">← Back</button>
       <button class="btn btn-ghost" data-close="modal-field-report">Cancel</button>
       <button class="btn" id="fr-submit">Next →</button>
     </div>
@@ -343,8 +342,6 @@ const RATING_DIMS = [
   { id:'quality',       label:'Product / Service Quality', hint:'Did the product or service meet expectations?' },
   // ─── Delivery & Reliability ─────────────────────────────────
   { id:'delivery',      label:'Delivery & Reliability',    hint:'On time, as promised, consistent?' },
-  // ─── Pricing ────────────────────────────────────────────────
-  { id:'pricing',       label:'Pricing',                   hint:'Is the price fair and transparent?' },
   // ─── Value ──────────────────────────────────────────────────
   { id:'value',         label:'Value',                     hint:'Was it worth what you paid?' },
   // ─── Communication ──────────────────────────────────────────
@@ -545,8 +542,8 @@ $('av-submit').onclick = async () => {
 function openFieldReport(preselected=null) {
   frStep=preselected?2:1; frSelectedVendor=preselected; frRatings={};
   $('fr-comment').value='';
-  document.querySelector('input[name="fr-rec"][value="yes"]').checked=true;
-  document.querySelector('input[name="fr-perm"][value="yes"]').checked=true;
+  document.querySelectorAll('input[name="fr-rec"]').forEach(r=>r.checked=false);
+  document.querySelectorAll('input[name="fr-perm"]').forEach(r=>r.checked=false);
   hideErr('fr-error');
   renderFRStep();
   openModal('modal-field-report');
@@ -557,13 +554,11 @@ $('btn-field-report').onclick = () => openFieldReport(null);
 function renderFRStep() {
   if (frStep===1) {
     show('fr-step1'); hide('fr-step2');
-    $('fr-back-btn').style.display='none';
     $('fr-submit').textContent='Next →';
     $('fr-modal-title').textContent='Field Report — Select Vendor';
     renderVendorList($('fr-search').value);
   } else {
     hide('fr-step1'); show('fr-step2');
-    $('fr-back-btn').style.display='inline-block';
     $('fr-submit').textContent='Submit Field Report';
     $('fr-modal-title').textContent=`Field Report: ${frSelectedVendor.name}`;
     $('fr-vendor-selected').textContent=frSelectedVendor.name;
@@ -610,13 +605,15 @@ function renderVendorList(search='') {
   });
 }
 
-$('fr-back-btn').onclick = () => { frStep=1; renderFRStep(); };
-
 $('fr-submit').onclick = async () => {
   hideErr('fr-error');
   if (frStep===1) { if(!frSelectedVendor){showErr('fr-error','Please select a vendor.');return;} frStep=2;renderFRStep();return; }
   const unrated=RATING_DIMS.filter(d=>!frRatings[d.id]);
   if (unrated.length) { showErr('fr-error','Please rate all dimensions.'); return; }
+  const recChecked = document.querySelector('input[name="fr-rec"]:checked');
+  const permChecked = document.querySelector('input[name="fr-perm"]:checked');
+  if (!recChecked) { showErr('fr-error','Please answer: Would you work with this vendor again?'); return; }
+  if (!permChecked) { showErr('fr-error','Please answer: Does this vendor align with permaculture values?'); return; }
   $('fr-submit').disabled=true;
   try {
     await addDoc(collection(db,'reviews'), {
@@ -625,13 +622,13 @@ $('fr-submit').onclick = async () => {
       username:  currentProfile?.username||currentUser.email.split('@')[0],
       ratings:   frRatings,
       comment:   $('fr-comment').value.trim()||null,
-      recommend: document.querySelector('input[name="fr-rec"]:checked').value==='yes',
-      permaculture: document.querySelector('input[name="fr-perm"]:checked').value,
+      recommend: recChecked.value==='yes',
+      permaculture: permChecked.value,
       createdAt: serverTimestamp(),
     });
     closeModal('modal-field-report');
     if (selectedVendor?.id===frSelectedVendor.id) openDetail(selectedVendor);
-  } catch(e) { showErr('fr-error',e.message); }
+  } catch(e) { showErr('fr-error', e.message); console.error(e); }
   $('fr-submit').disabled=false;
 };
 
