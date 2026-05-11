@@ -500,25 +500,20 @@ async function loadVendors() {
 }
 
 // Parse municipality from full address string
-// e.g. "123 Calle X, Mayagüez, PR 00680, USA" → "Mayagüez, PR"
-// e.g. "456 Main St, Austin, TX 78701, USA" → "Austin, TX"
+// Returns just the city/municipality name, no state/country suffix
 function parseLocation(address) {
   if (!address) return null;
-  const parts = address.split(',').map(p => p.trim());
-  // Find a part that looks like a state/territory code (2 letters, possibly with zip)
-  for (let i = 1; i < parts.length; i++) {
-    const cur = parts[i];
-    const next = parts[i+1] || '';
-    // Match "PR 00680" or "TX 78701" pattern
-    if (/^[A-Z]{2}\s*\d{0,5}/.test(cur)) {
-      const state = cur.replace(/\s*\d+/, '').trim();
-      const city = parts[i-1];
-      if (city && state) return `${city}, ${state}`;
-    }
-  }
-  // Fallback: return second-to-last part before country
-  const filtered = parts.filter(p => p !== 'USA' && p !== 'United States' && p !== 'Puerto Rico');
-  return filtered.length >= 2 ? `${filtered[filtered.length-2]}, ${filtered[filtered.length-1].replace(/\s*\d+/,'').trim()}` : parts[0];
+  const parts = address.split(',').map(p => p.trim()).filter(Boolean);
+  // Filter out: pure numbers (zip), country names, 2-letter state codes + zip
+  const meaningful = parts.filter(p =>
+    !/^\d+$/.test(p) &&                    // not a zip code
+    !/^[A-Z]{2}(\s+\d+)?$/.test(p) &&     // not a state code like "PR" or "PR 00646"
+    !['USA','United States','Puerto Rico','Costa Rica','Dominican Republic'].includes(p)
+  );
+  // Return second-to-last meaningful part (skip street address, take city)
+  if (meaningful.length >= 2) return meaningful[meaningful.length - 2];
+  if (meaningful.length === 1) return meaningful[0];
+  return null;
 }
 
 function scoreColor(n) {
