@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD6vn5bagaNknFuVeMfS6o52YBaiitzbec&libraries=places"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -255,6 +256,16 @@
     </div>
     <div class="modal-body">
       <div id="add-vendor-error" class="msg-error hidden"></div>
+
+      <!-- Google Places Search -->
+      <div class="field">
+        <label>🔍 Find on Google Maps (optional — auto-fills details)</label>
+        <input id="av-google-search" type="text" placeholder="Search by business name or address…" autocomplete="off" />
+        <div style="font-size:11px;color:var(--mut);margin-top:4px">Select a result to auto-fill the form below</div>
+        <div id="av-coords-status" class="msg-success hidden" style="margin-top:6px;margin-bottom:0"></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:4px 0 16px">
+
       <div class="field">
         <label>Vendor Name *</label>
         <input id="av-name" type="text" placeholder="Company or individual name" />
@@ -401,6 +412,7 @@ const hideErr = id => hide(id);
 let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
+let avLat=null, avLng=null;
 
 // ── Theme ─────────────────────────────────────────────────────────
 let dark = localStorage.getItem('cai-theme')==='dark';
@@ -562,8 +574,30 @@ $('btn-detail-report').onclick = () => openFieldReport(selectedVendor);
 // ═══════════════════════════════════════════════════════════════════
 $('btn-add-vendor').onclick = () => {
   hideErr('add-vendor-error');
-  ['av-name','av-phone','av-website','av-address'].forEach(id => $(id).value='');
+  ['av-name','av-phone','av-website','av-address','av-google-search'].forEach(id => $(id).value='');
+  avLat=null; avLng=null;
+  hide('av-coords-status');
   openModal('modal-add-vendor');
+  // Initialize Google Places Autocomplete
+  if (window.google && window.google.maps && window.google.maps.places) {
+    const input = $('av-google-search');
+    const ac = new google.maps.places.Autocomplete(input, {
+      fields: ['name','formatted_address','formatted_phone_number','website','geometry'],
+    });
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (place.name)                   $('av-name').value    = place.name;
+      if (place.formatted_address)      $('av-address').value = place.formatted_address;
+      if (place.formatted_phone_number) $('av-phone').value   = place.formatted_phone_number;
+      if (place.website)                $('av-website').value = place.website.replace(/^https?:\/\//,'').replace(/\/$/,'');
+      if (place.geometry?.location) {
+        avLat = place.geometry.location.lat();
+        avLng = place.geometry.location.lng();
+        $('av-coords-status').textContent = `📍 Location captured: ${avLat.toFixed(4)}, ${avLng.toFixed(4)}`;
+        $('av-coords-status').classList.remove('hidden');
+      }
+    });
+  }
 };
 
 $('av-submit').onclick = async () => {
@@ -578,8 +612,11 @@ $('av-submit').onclick = async () => {
       phone:   $('av-phone').value.trim()||null,
       website: $('av-website').value.trim()||null,
       address: $('av-address').value.trim()||null,
+      lat:     avLat||null,
+      lng:     avLng||null,
       flagged: false, createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
+    avLat=null; avLng=null;
     vendors.push({id:ref.id,name,category:cat,flagged:false});
     vendors.sort((a,b)=>a.name.localeCompare(b.name));
     renderGrid();
