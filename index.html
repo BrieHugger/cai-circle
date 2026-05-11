@@ -405,8 +405,10 @@ let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let dark = localStorage.getItem('cai-theme')==='dark';
 function applyTheme() {
   document.body.classList.toggle('dark',dark);
-  $('theme-btn').textContent      = dark?'☀':'☽';
-  $('auth-theme-btn').textContent = dark?'☀ Light mode':'☽ Dark mode';
+  const tb = $('theme-btn');
+  const atb = $('auth-theme-btn');
+  if (tb)  tb.textContent  = dark?'☀':'☽';
+  if (atb) atb.textContent = dark?'☀ Light mode':'☽ Dark mode';
   if (typeof applyMapTile === 'function') applyMapTile();
 }
 applyTheme();
