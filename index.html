@@ -272,7 +272,9 @@
       </div>
       <div class="field">
         <label>Category *</label>
-        <select id="av-cat"></select>
+        <select id="av-cat">
+          <option value="" disabled selected>Please select a category</option>
+        </select>
       </div>
       <div class="field-row">
         <div class="field">
@@ -605,6 +607,7 @@ $('av-submit').onclick = async () => {
   const name = $('av-name').value.trim();
   const cat  = $('av-cat').value;
   if (!name) { showErr('add-vendor-error','Vendor name is required.'); return; }
+  if (!cat)  { showErr('add-vendor-error','Please select a category.'); return; }
   $('av-submit').disabled = true;
   try {
     const ref = await addDoc(collection(db,'vendors'), {
@@ -616,8 +619,15 @@ $('av-submit').onclick = async () => {
       lng:     avLng||null,
       flagged: false, createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
+    const savedLat = avLat, savedLng = avLng;
+    const savedPhone = $('av-phone').value.trim()||null;
+    const savedWebsite = $('av-website').value.trim()||null;
+    const savedAddress = $('av-address').value.trim()||null;
     avLat=null; avLng=null;
-    vendors.push({id:ref.id,name,category:cat,flagged:false});
+    vendors.push({id:ref.id, name, category:cat, flagged:false,
+      phone:savedPhone, website:savedWebsite, address:savedAddress,
+      lat:savedLat, lng:savedLng
+    });
     vendors.sort((a,b)=>a.name.localeCompare(b.name));
     renderGrid();
     closeModal('modal-add-vendor');
