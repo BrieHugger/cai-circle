@@ -129,8 +129,8 @@
     .sec-title-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 
     /* Map */
-    .map-wrap { display:flex; height:calc(100vh - 54px); width:100%; overflow:hidden; }
-    #map { flex:1; min-width:0; min-height:0; z-index:0; width:100%; }
+    .map-wrap { display:flex; height:calc(100vh - 54px); width:100%; overflow:hidden; position:fixed; top:54px; left:0; right:0; bottom:0; }
+    #map { flex:1; min-width:0; min-height:0; z-index:0; width:100%; height:100%; }
     .map-sidebar { width:260px; flex-shrink:0; background:var(--surf); border-left:1px solid var(--bdr); overflow-y:auto; display:flex; flex-direction:column; }
     .map-sidebar-head { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--mut); padding:12px 16px; border-bottom:1px solid var(--bdr); flex-shrink:0; }
     .map-sidebar-item { padding:10px 16px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .1s; }
@@ -233,10 +233,9 @@
   <div id="view-map" class="hidden">
     <div class="map-wrap">
       <div id="map">
-        <div style="position:absolute;bottom:24px;left:10px;z-index:1000;display:flex;gap:4px">
-          <button onclick="setMapTile('light')" id="tile-light" style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Light</button>
-          <button onclick="setMapTile('dark')"  id="tile-dark"  style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Dark</button>
-          <button onclick="setMapTile('sat')"   id="tile-sat"   style="padding:5px 12px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Satellite</button>
+        <div style="position:absolute;bottom:24px;right:10px;z-index:1000;display:flex;gap:4px">
+          <button onclick="setMapStyle('map')"  id="tile-map" style="padding:5px 14px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2);font-weight:bold">Map</button>
+          <button onclick="setMapStyle('sat')"  id="tile-sat" style="padding:5px 14px;font-size:12px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf);box-shadow:0 1px 4px rgba(0,0,0,.2)">Satellite</button>
         </div>
       </div>
       <div class="map-sidebar">
@@ -408,6 +407,7 @@ function applyTheme() {
   document.body.classList.toggle('dark',dark);
   $('theme-btn').textContent      = dark?'☀':'☽';
   $('auth-theme-btn').textContent = dark?'☀ Light mode':'☽ Dark mode';
+  if (typeof applyMapTile === 'function') applyMapTile();
 }
 applyTheme();
 $('theme-btn').onclick      = () => { dark=!dark; localStorage.setItem('cai-theme',dark?'dark':'light'); applyTheme(); };
@@ -688,6 +688,7 @@ showView('list');
 // ═══════════════════════════════════════════════════════════════════
 let leafletMap = null;
 let currentTileLayer = null;
+let currentMapStyle = 'map'; // 'map' or 'sat'
 
 const TILES = {
   light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
@@ -695,17 +696,28 @@ const TILES = {
   sat:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
 };
 
-window.setMapTile = function(type) {
+function getMapTile() {
+  if (currentMapStyle === 'sat') return 'sat';
+  return dark ? 'dark' : 'light';
+}
+
+function applyMapTile() {
   if (!leafletMap) return;
   if (currentTileLayer) leafletMap.removeLayer(currentTileLayer);
+  const type = getMapTile();
   currentTileLayer = L.tileLayer(TILES[type], {
     attribution: type==='sat' ? '© Esri' : '© OpenStreetMap contributors © CARTO'
   }).addTo(leafletMap);
   // Update button styles
-  ['light','dark','sat'].forEach(t => {
-    const btn = document.getElementById(`tile-${t}`);
-    if (btn) btn.style.fontWeight = t===type ? 'bold' : 'normal';
-  });
+  const mapBtn = document.getElementById('tile-map');
+  const satBtn = document.getElementById('tile-sat');
+  if (mapBtn) mapBtn.style.fontWeight = currentMapStyle==='map' ? 'bold' : 'normal';
+  if (satBtn) satBtn.style.fontWeight = currentMapStyle==='sat' ? 'bold' : 'normal';
+}
+
+window.setMapStyle = function(style) {
+  currentMapStyle = style;
+  applyMapTile();
 };
 
 window.switchView = function(v) {
@@ -714,6 +726,8 @@ window.switchView = function(v) {
   show(`view-${v}`);
   $('btn-view-list').classList.toggle('active', v==='list');
   $('btn-view-map').classList.toggle('active', v==='map');
+  const mainEl = document.querySelector('.main');
+  if (mainEl) mainEl.style.display = v==='map' ? 'none' : '';
   if (v==='map') initMap();
 };
 
@@ -723,9 +737,8 @@ function initMap() {
     renderMapSidebar();
     return;
   }
-
-  leafletMap = L.map('map').setView([18.2208, -66.5901], 9);
-  setMapTile('light');
+  leafletMap = L.map('map', { zoomControl: true }).setView([18.2208, -66.5901], 9);
+  applyMapTile();
   renderMapPins();
   renderMapSidebar();
 }
