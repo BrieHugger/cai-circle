@@ -172,7 +172,7 @@
       <input id="auth-password" type="password" placeholder="••••••••" autocomplete="current-password" />
     </div>
     <button class="btn" style="width:100%;margin-top:4px" id="auth-submit">Sign In</button>
-    <p class="auth-hint">CAI Circle is a private community tool.<br>Contact your administrator for access.</p>
+    <p class="auth-hint">CAI Circle is a private community tool.<br>Use your assigned username, not your email address.</p>
     <div style="text-align:center;margin-top:14px">
       <button class="btn btn-ghost btn-sm" id="auth-theme-btn">☽ Dark mode</button>
     </div>
@@ -405,10 +405,8 @@ let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let dark = localStorage.getItem('cai-theme')==='dark';
 function applyTheme() {
   document.body.classList.toggle('dark',dark);
-  const tb = $('theme-btn');
-  const atb = $('auth-theme-btn');
-  if (tb)  tb.textContent  = dark?'☀':'☽';
-  if (atb) atb.textContent = dark?'☀ Light mode':'☽ Dark mode';
+  $('theme-btn').textContent      = dark?'☀':'☽';
+  $('auth-theme-btn').textContent = dark?'☀ Light mode':'☽ Dark mode';
   if (typeof applyMapTile === 'function') applyMapTile();
 }
 applyTheme();
@@ -458,20 +456,68 @@ onAuthStateChanged(auth, async user => {
   }
 });
 
+function getLoginEmailFromUsername(username) {
+  // The app uses simple usernames, but Firebase Auth requires an email.
+  // Example: username "mary smith" becomes mary_smith@caicircle.app
+  return `${username.toLowerCase().trim().replace(/\s+/g, '_')}@caicircle.app`;
+}
+
+function friendlyAuthError(error) {
+  const code = error?.code || '';
+  console.error('Firebase login error:', code, error);
+
+  if (code === 'auth/invalid-email') return 'Login setup error: the generated email address is invalid.';
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Invalid username or password.';
+  if (code === 'auth/too-many-requests') return 'Too many failed attempts. Try again later or reset the user in Firebase Authentication.';
+  if (code === 'auth/network-request-failed') return 'Network error. Check internet connection and Firebase authorized domains.';
+  if (code === 'auth/configuration-not-found') return 'Firebase Auth is not configured. Enable Email/Password sign-in in Firebase Authentication.';
+  if (code === 'auth/operation-not-allowed') return 'Email/password login is not enabled in Firebase Authentication.';
+
+  return error?.message || 'Login failed. Open DevTools Console for the exact Firebase error.';
+}
+
 async function doSignIn() {
   hideErr('auth-error');
   const u = $('auth-username').value.trim();
   const p = $('auth-password').value;
-  if (!u||!p) { showErr('auth-error','Please enter your username and password.'); return; }
+
+  if (!u || !p) {
+    showErr('auth-error', 'Please enter your username and password.');
+    return;
+  }
+
+  const email = getLoginEmailFromUsername(u);
   $('auth-submit').disabled = true;
-  try { await signInWithEmailAndPassword(auth, toEmail(u), p); }
-  catch { showErr('auth-error','Invalid username or password.'); $('auth-submit').disabled=false; }
+  $('auth-submit').textContent = 'Signing in…';
+
+  try {
+    await signInWithEmailAndPassword(auth, email, p);
+  } catch (error) {
+    showErr('auth-error', friendlyAuthError(error));
+  } finally {
+    $('auth-submit').disabled = false;
+    $('auth-submit').textContent = 'Sign In';
+  }
 }
 
-$('auth-submit').onclick = doSignIn;
-$('auth-username').addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
-$('auth-password').addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
-$('btn-signout').onclick  = () => signOut(auth);
+function wireAuthButtons() {
+  const submit = $('auth-submit');
+  const username = $('auth-username');
+  const password = $('auth-password');
+  const signout = $('btn-signout');
+
+  if (!submit || !username || !password) {
+    console.error('Login form elements were not found in the page.');
+    return;
+  }
+
+  submit.addEventListener('click', doSignIn);
+  username.addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
+  password.addEventListener('keydown', e => { if (e.key === 'Enter') doSignIn(); });
+  if (signout) signout.addEventListener('click', () => signOut(auth));
+}
+
+wireAuthButtons();
 
 // ═══════════════════════════════════════════════════════════════════
 // VENDORS
