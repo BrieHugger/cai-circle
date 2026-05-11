@@ -204,6 +204,7 @@
     <!-- List View -->
     <div id="view-list">
       <div class="filter-bar">
+        <input id="search-input" type="text" placeholder="Search vendors…" style="padding:6px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:13px;outline:none;min-width:180px" />
         <select id="filter-cat">
           <option value="all">All Categories</option>
         </select>
@@ -345,7 +346,6 @@
   <div class="modal" style="max-width:400px">
     <div class="modal-header">
       <div class="modal-title" id="fillin-label">Add Field</div>
-      <button class="modal-close" onclick="hide('modal-fillin')">×</button>
     </div>
     <div class="modal-body">
       <div id="fillin-error" class="msg-error hidden"></div>
@@ -592,7 +592,7 @@ const showErr = (id,msg) => { $(id).textContent=msg; show(id); };
 const hideErr = id => hide(id);
 
 // ── State ─────────────────────────────────────────────────────────
-let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
+let currentUser=null, currentProfile=null, vendors=[], filterCat='all', searchQuery='';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
 let avLat=null, avLng=null, avLocality=null, avPlaceId=null, avHours=null;
@@ -833,7 +833,13 @@ function starsHtml(n) {
 }
 
 function renderGrid() {
-  const f = vendors.filter(v => filterCat==='all' || v.category===filterCat);
+  const search = $('search-input').value.toLowerCase().trim();
+  const f = vendors.filter(v => {
+    if (filterCat !== 'all' && v.category !== filterCat) return false;
+    if (search && !v.name.toLowerCase().includes(search) &&
+        !(v.locality||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
   $('result-count').textContent = `${f.length} vendor${f.length!==1?'s':''}`;
   if (!f.length) { $('vendor-grid').innerHTML='<div class="empty">No vendors yet — add the first one!</div>'; return; }
   $('vendor-grid').innerHTML = f.map(v => {
@@ -865,6 +871,7 @@ function renderGrid() {
 }
 
 $('filter-cat').onchange = e => { filterCat=e.target.value; renderGrid(); };
+$('search-input').addEventListener('input', () => renderGrid());
 
 // ── Render detail meta with fillable empty fields ─────────────────
 function renderDetailMeta(v) {
