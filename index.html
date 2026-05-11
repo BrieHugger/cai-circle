@@ -351,7 +351,7 @@
 <!-- FIREBASE + APP LOGIC -->
 <script type="module">
 import { initializeApp }       from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, doc, getDoc, query, orderBy, where, serverTimestamp }
+import { getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, query, orderBy, where, serverTimestamp }
                                from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
                                from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
@@ -499,20 +499,66 @@ async function loadVendors() {
   renderMapSidebar();
 }
 
+// Parse municipality from full address string
+// e.g. "123 Calle X, Mayagüez, PR 00680, USA" → "Mayagüez, PR"
+// e.g. "456 Main St, Austin, TX 78701, USA" → "Austin, TX"
+function parseLocation(address) {
+  if (!address) return null;
+  const parts = address.split(',').map(p => p.trim());
+  // Find a part that looks like a state/territory code (2 letters, possibly with zip)
+  for (let i = 1; i < parts.length; i++) {
+    const cur = parts[i];
+    const next = parts[i+1] || '';
+    // Match "PR 00680" or "TX 78701" pattern
+    if (/^[A-Z]{2}\s*\d{0,5}/.test(cur)) {
+      const state = cur.replace(/\s*\d+/, '').trim();
+      const city = parts[i-1];
+      if (city && state) return `${city}, ${state}`;
+    }
+  }
+  // Fallback: return second-to-last part before country
+  const filtered = parts.filter(p => p !== 'USA' && p !== 'United States' && p !== 'Puerto Rico');
+  return filtered.length >= 2 ? `${filtered[filtered.length-2]}, ${filtered[filtered.length-1].replace(/\s*\d+/,'').trim()}` : parts[0];
+}
+
+function scoreColor(n) {
+  if (n===null||n===undefined) return 'var(--mut)';
+  if (n >= 4)   return 'var(--green)';
+  if (n >= 2.5) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function starsHtml(n) {
+  const r = Math.round(n);
+  return '★'.repeat(r) + '☆'.repeat(5-r);
+}
+
 function renderGrid() {
   const f = vendors.filter(v => filterCat==='all' || v.category===filterCat);
   $('result-count').textContent = `${f.length} vendor${f.length!==1?'s':''}`;
   if (!f.length) { $('vendor-grid').innerHTML='<div class="empty">No vendors yet — add the first one!</div>'; return; }
   $('vendor-grid').innerHTML = f.map(v => {
     const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
+    const loc = parseLocation(v.address);
+    const hasScore = v.avgScore !== undefined && v.avgScore !== null;
+    const scoreCol = hasScore ? scoreColor(v.avgScore) : 'var(--mut)';
     return `<div class="vendor-card" data-id="${v.id}">
       ${v.flagged?`<div class="flag-banner">⚑ ${v.flaggedReason||'Flagged'}</div>`:''}
-      <div class="card-top">
-        <div class="vendor-name">${v.name}</div>
-        <div class="vendor-cat" style="color:${cat.color}">${cat.label}</div>
-        ${v.address?`<div class="vendor-addr">${v.address}</div>`:''}
+      <div class="card-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+        <div>
+          <div class="vendor-name">${v.name}</div>
+          <div class="vendor-cat" style="color:${cat.color}">${cat.label}</div>
+          ${loc?`<div class="vendor-addr">${loc}</div>`:''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          ${hasScore
+            ? `<div style="font-family:var(--hf);font-size:22px;font-weight:700;color:${scoreCol};line-height:1">${v.avgScore.toFixed(1)}</div>
+               <div style="font-size:11px;color:${scoreCol};letter-spacing:1px">${starsHtml(v.avgScore)}</div>
+               <div style="font-size:10px;color:var(--mut)">${v.reviewCount||0} report${(v.reviewCount||0)!==1?'s':''}</div>`
+            : `<div style="font-size:11px;color:var(--mut);font-style:italic;margin-top:6px">No reports yet</div>`
+          }
+        </div>
       </div>
-      <div class="card-foot"><span class="card-foot-label">Tap to view field reports →</span></div>
     </div>`;
   }).join('');
   document.querySelectorAll('.vendor-card').forEach(card =>
@@ -725,6 +771,21 @@ $('fr-submit').onclick = async () => {
       permaculture: permChecked.value,
       createdAt: serverTimestamp(),
     });
+
+    // Recalculate avg score and review count for this vendor
+    const rSnap = await getDocs(query(collection(db,'reviews'), where('vendorId','==',frSelectedVendor.id)));
+    const allReviews = rSnap.docs.map(d=>d.data());
+    const reviewCount = allReviews.length;
+    const avgScore = allReviews.reduce((sum,r) => {
+      const vals = Object.values(r.ratings||{});
+      return sum + (vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0);
+    }, 0) / reviewCount;
+    await updateDoc(doc(db,'vendors',frSelectedVendor.id), { avgScore, reviewCount });
+
+    // Update local vendors array
+    const vIdx = vendors.findIndex(v=>v.id===frSelectedVendor.id);
+    if (vIdx>-1) { vendors[vIdx].avgScore=avgScore; vendors[vIdx].reviewCount=reviewCount; }
+    renderGrid();
     closeModal('modal-field-report');
     if (selectedVendor?.id===frSelectedVendor.id) openDetail(selectedVendor);
   } catch(e) { showErr('fr-error', e.message); console.error(e); }
