@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -126,7 +127,22 @@
     .sec-title { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--mut); margin-bottom:12px; }
     .sec-title-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 
-    /* Misc */
+    /* Map */
+    .map-wrap { display:flex; height:calc(100vh - 54px); }
+    #map { flex:1; min-width:0; z-index:0; }
+    .map-sidebar { width:260px; flex-shrink:0; background:var(--surf); border-left:1px solid var(--bdr); overflow-y:auto; display:flex; flex-direction:column; }
+    .map-sidebar-head { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--mut); padding:12px 16px; border-bottom:1px solid var(--bdr); flex-shrink:0; }
+    .map-sidebar-item { padding:10px 16px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .1s; }
+    .map-sidebar-item:hover { background:var(--surf2); }
+    .map-sidebar-item .vname { font-family:var(--hf); font-size:15px; font-weight:700; }
+    .map-sidebar-item .vcat  { font-size:10px; text-transform:uppercase; letter-spacing:.5px; margin-top:2px; }
+    .map-sidebar-item .vaddr { font-size:11px; color:var(--mut); margin-top:2px; }
+    .no-pin { font-size:10px; color:var(--mut); font-style:italic; margin-top:2px; }
+
+    /* View toggle */
+    .view-toggle { display:flex; border:1px solid var(--bdr); overflow:hidden; }
+    .view-toggle button { padding:5px 16px; font-size:13px; font-weight:500; border:none; background:transparent; color:var(--mut); transition:all .15s; }
+    .view-toggle button.active { background:var(--acc); color:var(--tx); }
     .hidden { display:none !important; }
     .empty { padding:40px 20px; text-align:center; color:var(--mut); font-style:italic; }
     .spinner { display:inline-block; width:22px; height:22px; border:2px solid var(--bdr); border-top-color:var(--tx); border-radius:50%; animation:spin .6s linear infinite; }
@@ -169,6 +185,10 @@
       <span class="logo-sub">Friends of</span>
       <span class="logo-name">CAI Circle</span>
     </div>
+    <div class="view-toggle">
+      <button id="btn-view-list" class="active" onclick="switchView('list')">List</button>
+      <button id="btn-view-map" onclick="switchView('map')">Map</button>
+    </div>
     <div class="header-right">
       <button class="theme-btn" id="theme-btn">☽</button>
       <button class="btn" id="btn-field-report">Field Report</button>
@@ -191,9 +211,20 @@
       </div>
     </div>
 
+    <!-- Map View -->
+    <div id="view-map" class="hidden">
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-sidebar">
+          <div class="map-sidebar-head" id="map-sidebar-count">All Vendors</div>
+          <div id="map-sidebar-list"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Detail View -->
     <div id="view-detail" class="hidden">
-      <button class="back-btn" id="btn-back">← Back to list</button>
+      <button class="back-btn" id="btn-back">← Back</button>
       <div class="detail-header">
         <div class="detail-cat" id="detail-cat"></div>
         <div class="detail-name" id="detail-name"></div>
@@ -297,6 +328,7 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <!-- FIREBASE + APP LOGIC -->
 <script type="module">
 import { initializeApp }       from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
@@ -382,7 +414,13 @@ CATEGORIES.forEach(c => {
 
 // ── Screen/view helpers ───────────────────────────────────────────
 function showScreen(n) { ['auth','app'].forEach(s => { s===n ? show(`screen-${s}`) : hide(`screen-${s}`); }); }
-function showView(n)   { ['list','detail'].forEach(v => { v===n ? show(`view-${v}`) : hide(`view-${v}`); }); }
+let currentView = 'list';
+let prevView = 'list';
+function showView(n) {
+  if (n !== 'detail') prevView = n;
+  currentView = n;
+  ['list','map','detail'].forEach(v => { v===n ? show(`view-${v}`) : hide(`view-${v}`); });
+}
 
 // ── Modal helpers ─────────────────────────────────────────────────
 const openModal  = id => show(id);
@@ -431,6 +469,7 @@ async function loadVendors() {
   const snap = await getDocs(query(collection(db,'vendors'), orderBy('name')));
   vendors = snap.docs.map(d => ({id:d.id,...d.data()}));
   renderGrid();
+  renderMapSidebar();
 }
 
 function renderGrid() {
@@ -502,7 +541,7 @@ async function openDetail(v) {
   }).join('');
 }
 
-$('btn-back').onclick          = () => { selectedVendor=null; showView('list'); };
+$('btn-back').onclick = () => { selectedVendor=null; showView(prevView); if(prevView==='map'){$('btn-view-map').classList.add('active');$('btn-view-list').classList.remove('active');} else {$('btn-view-list').classList.add('active');$('btn-view-map').classList.remove('active');} };
 $('btn-detail-report').onclick = () => openFieldReport(selectedVendor);
 
 // ═══════════════════════════════════════════════════════════════════
@@ -633,6 +672,85 @@ $('fr-submit').onclick = async () => {
 };
 
 showView('list');
+
+// ═══════════════════════════════════════════════════════════════════
+// MAP VIEW
+// ═══════════════════════════════════════════════════════════════════
+let leafletMap = null;
+
+window.switchView = function(v) {
+  // Hide all views
+  ['list','map','detail'].forEach(n => hide(`view-${n}`));
+  show(`view-${v}`);
+  // Toggle header buttons
+  $('btn-view-list').classList.toggle('active', v==='list');
+  $('btn-view-map').classList.toggle('active', v==='map');
+  if (v==='map') initMap();
+};
+
+function initMap() {
+  if (leafletMap) {
+    leafletMap.invalidateSize();
+    renderMapSidebar();
+    return;
+  }
+
+  const isDark = document.body.classList.contains('dark');
+  leafletMap = L.map('map').setView([18.2208, -66.5901], 9);
+
+  L.tileLayer(
+    isDark
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap contributors © CARTO' }
+  ).addTo(leafletMap);
+
+  renderMapPins();
+  renderMapSidebar();
+}
+
+function renderMapPins() {
+  if (!leafletMap) return;
+  vendors.forEach(v => {
+    if (!v.lat || !v.lng) return;
+    const cat = CATEGORIES.find(c=>c.id===v.category)||{color:'#888'};
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${cat.color};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3)"></div>`,
+      iconSize: [26,26], iconAnchor: [13,26],
+    });
+    L.marker([v.lat, v.lng], {icon}).addTo(leafletMap)
+      .bindPopup(`<div style="font-family:'Old Standard TT',serif;min-width:130px">
+        <strong>${v.name}</strong><br>
+        <span style="color:${cat.color};font-size:11px;text-transform:uppercase">${cat.label||''}</span>
+      </div>`)
+      .on('click', () => { openDetail(v); switchView('detail'); });
+  });
+}
+
+function renderMapSidebar() {
+  const list = $('map-sidebar-list');
+  $('map-sidebar-count').textContent = `${vendors.length} vendor${vendors.length!==1?'s':''}`;
+  if (!vendors.length) { list.innerHTML='<div class="empty" style="padding:20px">No vendors yet.</div>'; return; }
+  list.innerHTML = vendors.map(v => {
+    const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
+    return `<div class="map-sidebar-item" data-id="${v.id}">
+      <div class="vname">${v.name}</div>
+      <div class="vcat" style="color:${cat.color}">${cat.label}</div>
+      ${v.address?`<div class="vaddr">${v.address}</div>`:''}
+      ${(!v.lat||!v.lng)?'<div class="no-pin">📍 No map pin</div>':''}
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.map-sidebar-item').forEach(item => {
+    item.onclick = () => {
+      const v = vendors.find(x=>x.id===item.dataset.id);
+      if (v) { openDetail(v); switchView('detail'); }
+    };
+  });
+}
+
+// Re-render map when theme changes
+const origApplyTheme = window._applyTheme;
 </script>
 </body>
 </html>
