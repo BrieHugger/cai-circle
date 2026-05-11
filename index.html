@@ -264,6 +264,7 @@
         <input id="av-google-search" type="text" placeholder="Search by business name or address…" autocomplete="off" />
         <div style="font-size:11px;color:var(--mut);margin-top:4px">Select a result to auto-fill the form below</div>
         <div id="av-coords-status" class="msg-success hidden" style="margin-top:6px;margin-bottom:0"></div>
+        <button id="av-view-existing" class="btn btn-ghost btn-sm hidden" style="margin-top:8px;color:var(--green)">→ View Existing Listing</button>
       </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:4px 0 16px">
 
@@ -299,6 +300,25 @@
   </div>
 </div>
 
+<!-- SOFT DUPLICATE WARNING MODAL -->
+<div id="modal-soft-dupe" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">⚠ Possible Duplicate</div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;margin-bottom:14px">A vendor with similar details already exists in CAI Circle:</p>
+      <div id="soft-dupe-card" style="background:var(--surf2);border:1px solid var(--bdr);padding:14px;margin-bottom:16px;"></div>
+      <p style="font-size:13px;color:var(--mut)">Is this the same vendor, or a genuinely different listing?</p>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-ghost btn-sm" id="soft-dupe-discard-view">Discard & View Existing</button>
+      <button class="btn btn-ghost btn-sm" id="soft-dupe-discard">Discard Draft</button>
+      <button class="btn btn-sm" id="soft-dupe-override">Add Anyway — It's Different</button>
+    </div>
+  </div>
+</div>
+
 <!-- ADMIN MODAL -->
 <div id="modal-admin" class="modal-backdrop hidden">
   <div class="modal" style="max-width:600px">
@@ -320,7 +340,7 @@
           </div>
           <div class="field" style="margin-bottom:0">
             <label>Temporary Password</label>
-            <input id="admin-new-password" type="text" placeholder="Share with them" />
+            <input id="admin-new-password" type="text" placeholder="Create a password" />
           </div>
         </div>
         <button class="btn" style="margin-top:10px" id="admin-create-btn">Create Account</button>
@@ -465,7 +485,8 @@ const hideErr = id => hide(id);
 let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
-let avLat=null, avLng=null, avLocality=null;
+let avLat=null, avLng=null, avLocality=null, avPlaceId=null;
+let softDuplicateTarget=null;
 
 // ── Theme ─────────────────────────────────────────────────────────
 let dark = localStorage.getItem('cai-theme')==='dark';
@@ -600,7 +621,6 @@ function renderGrid() {
     const hasScore = v.avgScore !== undefined && v.avgScore !== null;
     const scoreCol = hasScore ? scoreColor(v.avgScore) : 'var(--mut)';
     return `<div class="vendor-card" data-id="${v.id}">
-      ${v.flagged?`<div class="flag-banner">⚑ ${v.flaggedReason||'Flagged'}</div>`:''}
       <div class="card-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
         <div>
           <div class="vendor-name">${v.name}</div>
@@ -680,17 +700,32 @@ $('btn-detail-report').onclick = () => openFieldReport(selectedVendor);
 $('btn-add-vendor').onclick = () => {
   hideErr('add-vendor-error');
   ['av-name','av-phone','av-website','av-address','av-google-search'].forEach(id => $(id).value='');
-  avLat=null; avLng=null; avLocality=null;
+  avLat=null; avLng=null; avLocality=null; avPlaceId=null;
   hide('av-coords-status');
   openModal('modal-add-vendor');
   // Initialize Google Places Autocomplete
   if (window.google && window.google.maps && window.google.maps.places) {
     const input = $('av-google-search');
     const ac = new google.maps.places.Autocomplete(input, {
-      fields: ['name','formatted_address','formatted_phone_number','website','geometry','address_components'],
+      fields: ['name','formatted_address','formatted_phone_number','website','geometry','address_components','place_id'],
     });
     ac.addListener('place_changed', () => {
       const place = ac.getPlace();
+
+      // ── Hard reject: duplicate Place ID ──────────────────────
+      if (place.place_id) {
+        const existing = vendors.find(v => v.placeId === place.place_id);
+        if (existing) {
+          showErr('add-vendor-error', '⚑ This vendor already exists in CAI Circle.');
+          $('av-view-existing').dataset.id = existing.id;
+          show('av-view-existing');
+          return;
+        }
+      }
+      hideErr('add-vendor-error');
+      hide('av-view-existing');
+      avPlaceId = place.place_id || null;
+
       if (place.name)                   $('av-name').value    = place.name;
       if (place.formatted_address)      $('av-address').value = place.formatted_address;
       if (place.formatted_phone_number) $('av-phone').value   = place.formatted_phone_number;
@@ -701,7 +736,6 @@ $('btn-add-vendor').onclick = () => {
         $('av-coords-status').textContent = `📍 Location captured: ${avLat.toFixed(4)}, ${avLng.toFixed(4)}`;
         $('av-coords-status').classList.remove('hidden');
       }
-      // Extract locality directly from structured components — no parsing needed
       if (place.address_components) {
         avLocality =
           place.address_components.find(c => c.types.includes('locality'))?.long_name ||
@@ -713,23 +747,83 @@ $('btn-add-vendor').onclick = () => {
   }
 };
 
+// View existing listing from hard reject
+$('av-view-existing').onclick = () => {
+  const id = $('av-view-existing').dataset.id;
+  const v = vendors.find(x => x.id === id);
+  if (v) { closeModal('modal-add-vendor'); openDetail(v); }
+};
+
+// Soft duplicate modal buttons
+$('soft-dupe-discard').onclick = () => { hide('modal-soft-dupe'); };
+$('soft-dupe-discard-view').onclick = () => {
+  hide('modal-soft-dupe');
+  closeModal('modal-add-vendor');
+  if (softDuplicateTarget) openDetail(softDuplicateTarget);
+};
+$('soft-dupe-override').onclick = () => {
+  hide('modal-soft-dupe');
+  $('av-submit').dataset.override = 'true';
+  $('av-submit').click();
+};
+
+// Populate soft dupe card when modal shows
+const softDupeObserver = new MutationObserver(() => {
+  if (!$('modal-soft-dupe').classList.contains('hidden') && softDuplicateTarget) {
+    const v = softDuplicateTarget;
+    const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
+    $('soft-dupe-card').innerHTML = `
+      <div style="font-family:var(--hf);font-size:18px;font-weight:700">${v.name}</div>
+      <div style="font-size:11px;text-transform:uppercase;color:${cat.color};margin-top:3px">${cat.label}</div>
+      ${v.locality||v.address?`<div style="font-size:12px;color:var(--mut);margin-top:4px">${v.locality||v.address}</div>`:''}
+      ${v.phone?`<div style="font-size:12px;color:var(--mut)">${v.phone}</div>`:''}
+    `;
+  }
+});
+softDupeObserver.observe($('modal-soft-dupe'), { attributes: true, attributeFilter: ['class'] });
+
+function checkSoftDuplicate(name, phone, address) {
+  const nameLower = name.toLowerCase().trim();
+  const phoneTrim = phone ? phone.replace(/\D/g,'') : '';
+  const addrLower = address ? address.toLowerCase().trim() : '';
+  return vendors.find(v => {
+    if (v.name.toLowerCase().trim() === nameLower) return true;
+    if (phoneTrim && v.phone && v.phone.replace(/\D/g,'') === phoneTrim) return true;
+    if (addrLower && v.address && v.address.toLowerCase().trim() === addrLower) return true;
+    return false;
+  }) || null;
+}
+
 $('av-submit').onclick = async () => {
   hideErr('add-vendor-error');
-  const name = $('av-name').value.trim();
-  const cat  = $('av-cat').value;
+  const name    = $('av-name').value.trim();
+  const cat     = $('av-cat').value;
+  const phone   = $('av-phone').value.trim();
+  const address = $('av-address').value.trim();
   if (!name) { showErr('add-vendor-error','Vendor name is required.'); return; }
   if (!cat)  { showErr('add-vendor-error','Please select a category.'); return; }
+
+  // Soft duplicate check
+  const dupe = checkSoftDuplicate(name, phone, address);
+  if (dupe && !$('av-submit').dataset.override) {
+    softDuplicateTarget = dupe;
+    show('modal-soft-dupe');
+    return;
+  }
+  delete $('av-submit').dataset.override;
+
   $('av-submit').disabled = true;
   try {
     const ref = await addDoc(collection(db,'vendors'), {
       name, category:cat,
-      phone:    $('av-phone').value.trim()||null,
+      phone:    phone||null,
       website:  $('av-website').value.trim()||null,
-      address:  $('av-address').value.trim()||null,
+      address:  address||null,
       locality: avLocality||null,
       lat:      avLat||null,
       lng:      avLng||null,
-      flagged: false, createdBy:currentUser.uid, createdAt:serverTimestamp(),
+      placeId:  avPlaceId||null,
+      createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
     const savedLat = avLat, savedLng = avLng, savedLocality = avLocality;
     const savedPhone = $('av-phone').value.trim()||null;
@@ -903,7 +997,6 @@ async function loadAdminVendors() {
         ${v.flagged?'<span style="font-size:10px;color:var(--red);margin-left:8px">⚑ Flagged</span>':''}
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="adminFlagVendor('${v.id}',${!!v.flagged})">${v.flagged?'Unflag':'Flag'}</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="adminDeleteVendor('${v.id}','${v.name}')">Delete</button>
       </div>
     </div>`;
@@ -919,22 +1012,6 @@ window.deleteMember = async (uid, username) => {
   if (!confirm(`Delete account for "${username}"? This cannot be undone.`)) return;
   await deleteDoc(doc(db,'users',uid));
   loadAdminMembers();
-};
-
-window.adminFlagVendor = async (id, flagged) => {
-  if (!flagged) {
-    const reason = prompt('Reason for flagging:');
-    if (!reason) return;
-    await updateDoc(doc(db,'vendors',id), { flagged: true, flaggedReason: reason });
-    const v = vendors.find(x=>x.id===id);
-    if (v) { v.flagged=true; v.flaggedReason=reason; }
-  } else {
-    await updateDoc(doc(db,'vendors',id), { flagged: false, flaggedReason: null });
-    const v = vendors.find(x=>x.id===id);
-    if (v) { v.flagged=false; v.flaggedReason=null; }
-  }
-  renderGrid();
-  loadAdminVendors();
 };
 
 window.adminDeleteVendor = async (id, name) => {
