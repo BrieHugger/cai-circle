@@ -305,20 +305,86 @@
       </div>
 
       <!-- Hours — auto-filled from Google or manually entered -->
-      <div id="av-hours-section">
-        <div id="av-hours-google" class="hidden" style="background:var(--surf2);border:1px solid var(--bdr);padding:10px 12px;margin-bottom:8px;font-size:12px;color:var(--mut)">
-          ✓ Hours imported from Google
+      <div id="av-hours-section" style="margin-bottom:8px">
+        <!-- Google hours found -->
+        <div id="av-hours-google" class="hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surf2);border:1px solid var(--bdr);margin-bottom:6px">
+            <span style="font-size:12px;color:var(--mut)">✓ Hours imported from Google</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;color:var(--tx)">
+              <input type="checkbox" id="av-island-time-google" style="width:14px;height:14px" />
+              ⚠ Island Time Warning
+            </label>
+          </div>
         </div>
-        <div id="av-hours-manual-toggle" style="font-size:12px;color:var(--acc);cursor:pointer;margin-bottom:4px" onclick="toggleManualHours()">+ Add hours manually (optional)</div>
+
+        <!-- Manual hours -->
+        <div class="field" style="margin-bottom:6px">
+          <label>Hours (optional)</label>
+          <button type="button" class="btn btn-ghost" style="width:100%;text-align:left;justify-content:flex-start" id="av-hours-manual-toggle" onclick="toggleManualHours()">+ Add hours manually</button>
+        </div>
         <div id="av-hours-manual" class="hidden">
-          <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Leave blank for closed. Use 24h format (e.g. 09:00 – 17:00)</div>
+          <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Leave blank for days that don't apply.</div>
           <div id="av-hours-rows"></div>
+          <!-- Island Time after manual hours -->
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:10px;padding:8px 12px;background:var(--acc);border:1px solid var(--bdr)">
+            <input type="checkbox" id="av-island-time-manual" style="width:14px;height:14px" />
+            <span style="color:var(--tx)">⚠ Island Time Warning — hours may vary, show up and find out</span>
+          </label>
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" data-close="modal-add-vendor">Cancel</button>
       <button class="btn" id="av-submit">Add Vendor</button>
+    </div>
+  </div>
+</div>
+
+<!-- FILL-IN MODAL -->
+<div id="modal-fillin" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title" id="fillin-label">Add Field</div>
+      <button class="modal-close" onclick="hide('modal-fillin')">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="fillin-error" class="msg-error hidden"></div>
+      <div class="field">
+        <input id="fillin-input" type="text" placeholder="" />
+      </div>
+      <div id="fillin-confirm-section" class="hidden" style="background:var(--surf2);border:1px solid var(--bdr);padding:12px;margin-top:4px">
+        <div style="font-size:11px;color:var(--mut);margin-bottom:4px;letter-spacing:1px;text-transform:uppercase">Confirm — adding this to the listing:</div>
+        <div id="fillin-preview" style="font-size:14px;font-weight:500"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="hideModal('modal-fillin')">Cancel</button>
+      <button class="btn" id="fillin-preview-btn" onclick="previewFillIn()">Preview →</button>
+      <button class="btn hidden" id="fillin-save-btn" onclick="submitFillIn()">Confirm & Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ISLAND TIME WARNING MODAL -->
+<div id="modal-island-time" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">⚠ Before you flag Island Time…</div>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;line-height:1.7;margin-bottom:12px">
+        This flag is meant for vendors who <strong>regularly</strong> don't follow their posted hours — not one-off days, holidays, or bad luck.
+      </p>
+      <p style="font-size:14px;line-height:1.7;margin-bottom:12px">
+        If you've personally shown up multiple times during posted hours and found them closed, this flag is for you.
+      </p>
+      <p style="font-size:14px;line-height:1.7;color:var(--mut)">
+        Please use it thoughtfully — it affects how the whole community perceives this vendor.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="hideModal('modal-island-time')">Cancel</button>
+      <button class="btn" onclick="hideModal('modal-island-time');applyIslandTime(true)">Yes, flag it</button>
     </div>
   </div>
 </div>
@@ -383,6 +449,27 @@
       <div>
         <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Vendor Management</div>
         <div id="admin-vendor-list"><div class="empty" style="padding:16px">Loading…</div></div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:20px 0">
+
+      <!-- Invite Link -->
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Invite Link</div>
+        <div id="admin-invite-error" class="msg-error hidden"></div>
+        <div id="admin-invite-success" class="msg-success hidden"></div>
+        <div style="font-size:13px;color:var(--mut);margin-bottom:10px">Share this link with new members to let them create an account:</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:var(--surf2);border:1px solid var(--bdr);padding:10px 12px">
+          <span style="font-size:12px;color:var(--mut);flex-shrink:0">briehugger.github.io/cai-circle/join.html?code=</span>
+          <span id="admin-invite-current" style="font-size:12px;font-weight:600;color:var(--tx)">loading…</span>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;flex-shrink:0" onclick="copyInviteLink()">Copy Link</button>
+        </div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-bottom:6px">Change invite code</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--mut);white-space:nowrap">join.html?code=</span>
+          <input id="admin-invite-new" type="text" placeholder="newcode" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:13px;outline:none" />
+          <button class="btn btn-sm" onclick="changeInviteCode()">Update</button>
+        </div>
       </div>
 
     </div>
@@ -571,15 +658,27 @@ function fmt12(t) {
 }
 
 // ── Island Time Warning toggle ────────────────────────────────────
-window.toggleIslandTime = async function() {
+window.toggleIslandTime = function() {
   if (!selectedVendor) return;
-  const newVal = !selectedVendor.islandTime;
-  await updateDoc(doc(db,'vendors',selectedVendor.id), { islandTime: newVal });
-  selectedVendor.islandTime = newVal;
-  const v = vendors.find(x=>x.id===selectedVendor.id);
-  if (v) v.islandTime = newVal;
-  renderHoursSection(selectedVendor);
+  if (selectedVendor.islandTime) {
+    // Removing — just confirm simply
+    if (!confirm('Remove the Island Time Warning from this vendor?')) return;
+    applyIslandTime(false);
+  } else {
+    // Adding — show the educational warning modal
+    show('modal-island-time');
+  }
 };
+
+async function applyIslandTime(val) {
+  await updateDoc(doc(db,'vendors',selectedVendor.id), { islandTime: val });
+  selectedVendor.islandTime = val;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v.islandTime = val;
+  renderHoursSection(selectedVendor);
+}
+window.applyIslandTime = applyIslandTime;
+window.hideModal = id => hide(id);
 
 function renderHoursSection(v) {
   const hours = v.hours;
@@ -767,6 +866,55 @@ function renderGrid() {
 
 $('filter-cat').onchange = e => { filterCat=e.target.value; renderGrid(); };
 
+// ── Render detail meta with fillable empty fields ─────────────────
+function renderDetailMeta(v) {
+  const fields = [
+    { key:'phone',   label:'Phone',   val:v.phone },
+    { key:'website', label:'Website', val:v.website },
+    { key:'address', label:'Address', val:v.address },
+  ];
+  return fields.map(f => {
+    if (f.val) return `<span>${f.val}</span>`;
+    return `<span><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;color:var(--mut)" onclick="openFillIn('${f.key}','${f.label}')">+ Add ${f.label}</button></span>`;
+  }).join('');
+}
+
+// Fill-in state
+let fillInField = null, fillInLabel = null;
+
+window.openFillIn = function(field, label) {
+  fillInField = field; fillInLabel = label;
+  $('fillin-label').textContent = `Add ${label}`;
+  $('fillin-input').value = '';
+  $('fillin-input').placeholder = label;
+  hide('fillin-confirm-section');
+  hide('fillin-error');
+  show('modal-fillin');
+  setTimeout(() => $('fillin-input').focus(), 100);
+};
+
+window.previewFillIn = function() {
+  const val = $('fillin-input').value.trim();
+  if (!val) { $('fillin-error').textContent='Please enter a value.'; show('fillin-error'); return; }
+  hide('fillin-error');
+  $('fillin-preview').textContent = val;
+  show('fillin-confirm-section');
+  hide('fillin-preview-btn');
+  show('fillin-save-btn');
+};
+
+window.submitFillIn = async function() {
+  if (!selectedVendor || !fillInField) return;
+  const val = $('fillin-input').value.trim();
+  if (!val) return;
+  await updateDoc(doc(db,'vendors',selectedVendor.id), { [fillInField]: val });
+  selectedVendor[fillInField] = val;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v[fillInField] = val;
+  hide('modal-fillin');
+  $('detail-meta').innerHTML = renderDetailMeta(selectedVendor);
+};
+
 // ═══════════════════════════════════════════════════════════════════
 // DETAIL VIEW
 // ═══════════════════════════════════════════════════════════════════
@@ -779,7 +927,7 @@ async function openDetail(v) {
   $('detail-name').textContent = v.name;
   const flagEl = $('detail-flag');
   v.flagged ? (flagEl.textContent=`⚑ ${v.flaggedReason||'Flagged'}`, show('detail-flag')) : hide('detail-flag');
-  $('detail-meta').innerHTML = [v.phone,v.website,v.address].filter(Boolean).map(m=>`<span>${m}</span>`).join('');
+  $('detail-meta').innerHTML = renderDetailMeta(v);
   renderHoursSection(v);
 
   $('detail-reports').innerHTML = '<div class="flex-center mt-16"><span class="spinner"></span></div>';
@@ -826,7 +974,9 @@ $('btn-add-vendor').onclick = () => {
   avLat=null; avLng=null; avLocality=null; avPlaceId=null; avHours=null;
   hide('av-coords-status'); hide('av-view-existing'); hide('av-hours-google');
   hide('av-hours-manual'); $('av-hours-rows').innerHTML='';
-  $('av-hours-manual-toggle').textContent='+ Add hours manually (optional)';
+  $('av-hours-manual-toggle').textContent='+ Add hours manually';
+  $('av-island-time-google').checked=false;
+  $('av-island-time-manual').checked=false;
   hide('av-coords-status');
   openModal('modal-add-vendor');
   // Initialize Google Places Autocomplete
@@ -842,9 +992,10 @@ $('btn-add-vendor').onclick = () => {
       if (place.place_id) {
         const existing = vendors.find(v => v.placeId === place.place_id);
         if (existing) {
-          showErr('add-vendor-error', '⚑ This vendor already exists in CAI Circle.');
+          $('add-vendor-error').innerHTML = `⚑ This vendor already exists in CAI Circle. &nbsp;<button onclick="viewExistingVendor()" style="background:#8a0000;color:#fff;border:none;padding:2px 10px;font-size:12px;cursor:pointer;font-family:var(--bf)">View Existing Listing →</button>`;
+          show('add-vendor-error');
           $('av-view-existing').dataset.id = existing.id;
-          show('av-view-existing');
+          avPlaceId = 'DUPLICATE'; // Mark as duplicate to block submit
           return;
         }
       }
@@ -872,14 +1023,13 @@ $('btn-add-vendor').onclick = () => {
       // Extract hours from Google
       if (place.opening_hours?.weekday_text?.length) {
         avHours = {};
-        // Google returns ["Monday: 9:00 AM – 5:00 PM", ...]
         place.opening_hours.weekday_text.forEach(line => {
           const [dayRaw, ...rest] = line.split(': ');
-          const day = dayRaw.trim();
-          avHours[day] = rest.join(': ').trim() || 'Closed';
+          avHours[dayRaw.trim()] = rest.join(': ').trim() || 'Closed';
         });
         show('av-hours-google');
-        hide('av-hours-manual-toggle'); // Hide manual option if Google has hours
+        hide('av-hours-manual-toggle');
+        hide('av-hours-manual');
       } else {
         avHours = null;
         hide('av-hours-google');
@@ -895,6 +1045,8 @@ $('av-view-existing').onclick = () => {
   const v = vendors.find(x => x.id === id);
   if (v) { closeModal('modal-add-vendor'); openDetail(v); }
 };
+// Also expose as global for inline button in error banner
+window.viewExistingVendor = () => $('av-view-existing').click();
 
 // Soft duplicate modal buttons
 $('soft-dupe-discard').onclick = () => { hide('modal-soft-dupe'); };
@@ -938,6 +1090,12 @@ function checkSoftDuplicate(name, phone, address) {
 
 $('av-submit').onclick = async () => {
   hideErr('add-vendor-error');
+  // Hard block if duplicate place ID was detected
+  if (avPlaceId === 'DUPLICATE') {
+    $('add-vendor-error').innerHTML = `⚑ This vendor already exists in CAI Circle. &nbsp;<button onclick="viewExistingVendor()" style="background:#8a0000;color:#fff;border:none;padding:2px 10px;font-size:12px;cursor:pointer;font-family:var(--bf)">View Existing Listing →</button>`;
+    show('add-vendor-error');
+    return;
+  }
   const name    = $('av-name').value.trim();
   const cat     = $('av-cat').value;
   const phone   = $('av-phone').value.trim();
@@ -966,6 +1124,7 @@ $('av-submit').onclick = async () => {
       lng:      avLng||null,
       hours:    avHours || collectManualHours() || null,
       placeId:  avPlaceId||null,
+      islandTime: avHours ? $('av-island-time-google').checked : $('av-island-time-manual').checked,
       createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
     const savedLat = avLat, savedLng = avLng, savedLocality = avLocality;
@@ -1106,6 +1265,7 @@ $('btn-admin').onclick = () => {
   openModal('modal-admin');
   loadAdminMembers();
   loadAdminVendors();
+  loadInviteCode();
 };
 
 async function loadAdminMembers() {
@@ -1190,6 +1350,39 @@ $('admin-create-btn').onclick = async () => {
     showErr('admin-create-error', e.message);
   }
   $('admin-create-btn').disabled = false;
+};
+
+// ── Invite Link ───────────────────────────────────────────────────
+async function loadInviteCode() {
+  const snap = await getDoc(doc(db,'settings','invite'));
+  const code = snap.exists() ? snap.data().code : 'friendsofcai';
+  $('admin-invite-current').textContent = code;
+  if (!snap.exists()) {
+    await setDoc(doc(db,'settings','invite'), { code });
+  }
+}
+
+window.copyInviteLink = function() {
+  const code = $('admin-invite-current').textContent;
+  const url = `https://briehugger.github.io/cai-circle/join.html?code=${code}`;
+  navigator.clipboard.writeText(url).then(() => {
+    $('admin-invite-success').textContent = '✓ Link copied to clipboard!';
+    show('admin-invite-success');
+    setTimeout(() => hide('admin-invite-success'), 2000);
+  });
+};
+
+window.changeInviteCode = async function() {
+  const newCode = $('admin-invite-new').value.trim().replace(/\s+/g,'-');
+  hide('admin-invite-error'); hide('admin-invite-success');
+  if (!newCode) { showErr('admin-invite-error','Please enter a new code.'); return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(newCode)) { showErr('admin-invite-error','Code can only contain letters, numbers, hyphens and underscores.'); return; }
+  await setDoc(doc(db,'settings','invite'), { code: newCode });
+  $('admin-invite-current').textContent = newCode;
+  $('admin-invite-new').value = '';
+  $('admin-invite-success').textContent = `✓ Invite code updated to "${newCode}"`;
+  show('admin-invite-success');
+  setTimeout(() => hide('admin-invite-success'), 3000);
 };
 
 // ═══════════════════════════════════════════════════════════════════
