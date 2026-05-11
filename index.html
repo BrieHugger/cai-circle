@@ -223,6 +223,17 @@
         <div id="detail-flag" class="detail-flag hidden"></div>
         <div class="detail-meta" id="detail-meta"></div>
       </div>
+      <!-- Hours section -->
+      <div id="detail-hours-section" class="hidden" style="margin-bottom:16px;padding:14px 16px;background:var(--surf);border:1px solid var(--bdr)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut)">Hours</div>
+          <button id="btn-island-time" class="btn btn-ghost btn-sm" onclick="toggleIslandTime()" style="font-size:11px">⚠ Flag Island Time</button>
+        </div>
+        <div id="detail-island-warning" class="hidden" style="background:#fff3cd;color:#7a4f00;font-size:12px;padding:6px 10px;margin-bottom:10px;border-left:3px solid #c8a000">
+          ⚠ Island Time Warning — Hours may vary. Show up and find out.
+        </div>
+        <div id="detail-hours-list" style="font-size:13px;line-height:2"></div>
+      </div>
       <div class="sec-title-row">
         <div class="sec-title" style="margin-bottom:0">Field Reports</div>
         <button class="btn btn-sm" id="btn-detail-report">+ File a Report</button>
@@ -291,6 +302,18 @@
       <div class="field">
         <label>Address (optional)</label>
         <input id="av-address" type="text" placeholder="Street, City, Region" />
+      </div>
+
+      <!-- Hours — auto-filled from Google or manually entered -->
+      <div id="av-hours-section">
+        <div id="av-hours-google" class="hidden" style="background:var(--surf2);border:1px solid var(--bdr);padding:10px 12px;margin-bottom:8px;font-size:12px;color:var(--mut)">
+          ✓ Hours imported from Google
+        </div>
+        <div id="av-hours-manual-toggle" style="font-size:12px;color:var(--acc);cursor:pointer;margin-bottom:4px" onclick="toggleManualHours()">+ Add hours manually (optional)</div>
+        <div id="av-hours-manual" class="hidden">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Leave blank for closed. Use 24h format (e.g. 09:00 – 17:00)</div>
+          <div id="av-hours-rows"></div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -485,8 +508,107 @@ const hideErr = id => hide(id);
 let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
-let avLat=null, avLng=null, avLocality=null, avPlaceId=null;
+let avLat=null, avLng=null, avLocality=null, avPlaceId=null, avHours=null;
 let softDuplicateTarget=null;
+
+const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+// ── Manual hours toggle ───────────────────────────────────────────
+window.toggleManualHours = function() {
+  const section = $('av-hours-manual');
+  const toggle  = $('av-hours-manual-toggle');
+  if (section.classList.contains('hidden')) {
+    show('av-hours-manual');
+    toggle.textContent = '− Hide hours';
+    // Build rows if not already built
+    if (!$('av-hours-rows').children.length) buildHoursRows();
+  } else {
+    hide('av-hours-manual');
+    toggle.textContent = '+ Add hours manually (optional)';
+  }
+};
+
+function buildHoursRows() {
+  $('av-hours-rows').innerHTML = DAYS.map(day => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px">
+      <span style="width:90px;color:var(--tx)">${day}</span>
+      <input type="time" id="av-h-open-${day}" style="padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:12px;width:90px" />
+      <span style="color:var(--mut)">–</span>
+      <input type="time" id="av-h-close-${day}" style="padding:4px 6px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:12px;width:90px" />
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--mut);cursor:pointer">
+        <input type="checkbox" id="av-h-closed-${day}" onchange="toggleDayClosed('${day}')"> Closed
+      </label>
+    </div>`).join('');
+}
+
+window.toggleDayClosed = function(day) {
+  const closed = $(`av-h-closed-${day}`).checked;
+  $(`av-h-open-${day}`).disabled  = closed;
+  $(`av-h-close-${day}`).disabled = closed;
+  if (closed) { $(`av-h-open-${day}`).value=''; $(`av-h-close-${day}`).value=''; }
+};
+
+function collectManualHours() {
+  if ($('av-hours-manual').classList.contains('hidden')) return null;
+  const hours = {};
+  DAYS.forEach(day => {
+    const closed = $(`av-h-closed-${day}`)?.checked;
+    const open   = $(`av-h-open-${day}`)?.value;
+    const close  = $(`av-h-close-${day}`)?.value;
+    if (closed) hours[day] = 'Closed';
+    else if (open && close) hours[day] = `${open} – ${close}`;
+  });
+  return Object.keys(hours).length ? hours : null;
+}
+
+function fmt12(t) {
+  if (!t || t === 'Closed') return t;
+  // Convert "HH:MM" to "H:MM AM/PM"
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+// ── Island Time Warning toggle ────────────────────────────────────
+window.toggleIslandTime = async function() {
+  if (!selectedVendor) return;
+  const newVal = !selectedVendor.islandTime;
+  await updateDoc(doc(db,'vendors',selectedVendor.id), { islandTime: newVal });
+  selectedVendor.islandTime = newVal;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v.islandTime = newVal;
+  renderHoursSection(selectedVendor);
+};
+
+function renderHoursSection(v) {
+  const hours = v.hours;
+  if (!hours || !Object.keys(hours).length) { hide('detail-hours-section'); return; }
+  show('detail-hours-section');
+  // Island Time Warning
+  if (v.islandTime) {
+    show('detail-island-warning');
+    $('btn-island-time').textContent = '✓ Remove Island Time Flag';
+  } else {
+    hide('detail-island-warning');
+    $('btn-island-time').textContent = '⚠ Flag Island Time';
+  }
+  // Render hours
+  $('detail-hours-list').innerHTML = DAYS.map(day => {
+    const val = hours[day];
+    if (!val) return '';
+    const isClosed = val === 'Closed';
+    // Google format: "9:00 AM – 5:00 PM" — use as-is
+    // Manual format: "09:00 – 17:00" — convert
+    const display = val.includes('AM')||val.includes('PM') ? val
+      : isClosed ? 'Closed'
+      : val.split(' – ').map(fmt12).join(' – ');
+    return `<div style="display:flex;gap:16px">
+      <span style="width:90px;color:var(--mut)">${day.slice(0,3)}</span>
+      <span style="${isClosed?'color:var(--mut);font-style:italic':''}">${display}</span>
+    </div>`;
+  }).join('');
+}
 
 // ── Theme ─────────────────────────────────────────────────────────
 let dark = localStorage.getItem('cai-theme')==='dark';
@@ -658,6 +780,7 @@ async function openDetail(v) {
   const flagEl = $('detail-flag');
   v.flagged ? (flagEl.textContent=`⚑ ${v.flaggedReason||'Flagged'}`, show('detail-flag')) : hide('detail-flag');
   $('detail-meta').innerHTML = [v.phone,v.website,v.address].filter(Boolean).map(m=>`<span>${m}</span>`).join('');
+  renderHoursSection(v);
 
   $('detail-reports').innerHTML = '<div class="flex-center mt-16"><span class="spinner"></span></div>';
   const snap = await getDocs(query(collection(db,'reviews'), where('vendorId','==',v.id), orderBy('createdAt','desc')));
@@ -700,14 +823,17 @@ $('btn-detail-report').onclick = () => openFieldReport(selectedVendor);
 $('btn-add-vendor').onclick = () => {
   hideErr('add-vendor-error');
   ['av-name','av-phone','av-website','av-address','av-google-search'].forEach(id => $(id).value='');
-  avLat=null; avLng=null; avLocality=null; avPlaceId=null;
+  avLat=null; avLng=null; avLocality=null; avPlaceId=null; avHours=null;
+  hide('av-coords-status'); hide('av-view-existing'); hide('av-hours-google');
+  hide('av-hours-manual'); $('av-hours-rows').innerHTML='';
+  $('av-hours-manual-toggle').textContent='+ Add hours manually (optional)';
   hide('av-coords-status');
   openModal('modal-add-vendor');
   // Initialize Google Places Autocomplete
   if (window.google && window.google.maps && window.google.maps.places) {
     const input = $('av-google-search');
     const ac = new google.maps.places.Autocomplete(input, {
-      fields: ['name','formatted_address','formatted_phone_number','website','geometry','address_components','place_id'],
+      fields: ['name','formatted_address','formatted_phone_number','website','geometry','address_components','place_id','opening_hours'],
     });
     ac.addListener('place_changed', () => {
       const place = ac.getPlace();
@@ -742,6 +868,22 @@ $('btn-add-vendor').onclick = () => {
           place.address_components.find(c => c.types.includes('sublocality'))?.long_name ||
           place.address_components.find(c => c.types.includes('administrative_area_level_2'))?.long_name ||
           null;
+      }
+      // Extract hours from Google
+      if (place.opening_hours?.weekday_text?.length) {
+        avHours = {};
+        // Google returns ["Monday: 9:00 AM – 5:00 PM", ...]
+        place.opening_hours.weekday_text.forEach(line => {
+          const [dayRaw, ...rest] = line.split(': ');
+          const day = dayRaw.trim();
+          avHours[day] = rest.join(': ').trim() || 'Closed';
+        });
+        show('av-hours-google');
+        hide('av-hours-manual-toggle'); // Hide manual option if Google has hours
+      } else {
+        avHours = null;
+        hide('av-hours-google');
+        show('av-hours-manual-toggle');
       }
     });
   }
@@ -822,6 +964,7 @@ $('av-submit').onclick = async () => {
       locality: avLocality||null,
       lat:      avLat||null,
       lng:      avLng||null,
+      hours:    avHours || collectManualHours() || null,
       placeId:  avPlaceId||null,
       createdBy:currentUser.uid, createdAt:serverTimestamp(),
     });
