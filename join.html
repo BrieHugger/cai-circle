@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join CAI Circle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #ffffff; --surf: #f8f8f8; --bdr: #e0e0e0;
+      --acc: #d8e1e6; --tx: #000000; --mut: #666666;
+      --green: #2d5a3d; --red: #8a0000;
+      --hf: 'Old Standard TT', Georgia, serif;
+      --bf: 'Source Sans 3', sans-serif;
+    }
+    body.dark {
+      --bg: #111111; --surf: #1a1a1a; --bdr: #333333;
+      --acc: #2a3a40; --tx: #f0f0f0; --mut: #999999;
+    }
+    html, body { min-height: 100%; background: var(--bg); color: var(--tx); font-family: var(--bf); font-size: 15px; -webkit-font-smoothing: antialiased; }
+    button { cursor: pointer; font-family: var(--bf); }
+    input { font-family: var(--bf); }
+
+    .screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+    .card { background:var(--surf); border:1px solid var(--bdr); padding:40px; width:100%; max-width:380px; }
+    .logo { text-align:center; margin-bottom:30px; }
+    .logo-sub  { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--mut); display:block; margin-bottom:4px; }
+    .logo-name { font-family:var(--hf); font-size:32px; font-weight:700; color:var(--tx); display:block; }
+    .tagline   { font-size:13px; color:var(--mut); text-align:center; margin-bottom:24px; line-height:1.6; }
+
+    .field { margin-bottom:16px; }
+    .field label { display:block; font-size:11px; font-weight:600; color:var(--mut); letter-spacing:1px; text-transform:uppercase; margin-bottom:5px; }
+    .field input { width:100%; padding:9px 12px; background:var(--bg); border:1px solid var(--bdr); color:var(--tx); font-size:14px; outline:none; transition:border-color .15s; }
+    .field input:focus { border-color:var(--tx); }
+
+    .btn { width:100%; padding:9px 18px; font-size:14px; font-weight:500; border:1px solid var(--bdr); background:var(--acc); color:var(--tx); margin-top:4px; transition:opacity .15s; }
+    .btn:hover { opacity:.8; }
+    .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+    .msg-error   { background:#fde8e8; color:#8a0000; font-size:13px; padding:8px 12px; margin-bottom:14px; border-left:3px solid #8a0000; }
+    .msg-success { background:#e8f5e9; color:#2d5a3d; font-size:13px; padding:8px 12px; margin-bottom:14px; border-left:3px solid #2d5a3d; text-align:center; }
+    body.dark .msg-error   { background:#2e1c1c; color:#e08080; }
+    body.dark .msg-success { background:#1c2e20; color:#7aad88; }
+
+    .hint { font-size:12px; color:var(--mut); text-align:center; margin-top:16px; line-height:1.6; }
+    .invalid-screen { display:none; }
+  </style>
+</head>
+<body>
+
+<!-- Invalid link screen -->
+<div class="screen invalid-screen" id="screen-invalid">
+  <div class="card">
+    <div class="logo">
+      <span class="logo-sub">Friends of</span>
+      <span class="logo-name">CAI Circle</span>
+    </div>
+    <div class="msg-error" style="text-align:center">
+      This invite link is invalid or has expired.<br>
+      Please ask your CAI administrator for a new link.
+    </div>
+    <a href="index.html" style="display:block;text-align:center;font-size:13px;color:var(--mut);margin-top:16px">← Back to sign in</a>
+  </div>
+</div>
+
+<!-- Signup screen -->
+<div class="screen" id="screen-signup" style="display:none">
+  <div class="card">
+    <div class="logo">
+      <span class="logo-sub">Friends of</span>
+      <span class="logo-name">CAI Circle</span>
+    </div>
+    <p class="tagline">You've been invited to join.<br>Create your account below.</p>
+    <div id="signup-error" style="display:none" class="msg-error"></div>
+    <div id="signup-success" style="display:none" class="msg-success"></div>
+    <div id="signup-form">
+      <div class="field">
+        <label>Choose a Username</label>
+        <input id="s-username" type="text" placeholder="your_name" autocomplete="username" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="s-password" type="password" placeholder="At least 6 characters" autocomplete="new-password" />
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input id="s-confirm" type="password" placeholder="Repeat your password" autocomplete="new-password" />
+      </div>
+      <button class="btn" id="s-submit">Create Account</button>
+    </div>
+    <p class="hint">Already have an account? <a href="index.html">Sign in here</a></p>
+  </div>
+</div>
+
+<!-- Loading screen -->
+<div class="screen" id="screen-loading">
+  <div style="color:var(--mut);font-family:var(--bf)">Checking invite link…</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword }
+  from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
+
+const app  = initializeApp({
+  apiKey:            "AIzaSyA0J9U7UJCBeqi3n5ELOjhiJesDADTvW-g",
+  authDomain:        "cai-circle.firebaseapp.com",
+  projectId:         "cai-circle",
+  storageBucket:     "cai-circle.firebasestorage.app",
+  messagingSenderId: "603183581550",
+  appId:             "1:603183581550:web:e0a0cd585b4545e07c197f"
+});
+const db   = getFirestore(app);
+const auth = getAuth(app);
+
+const toEmail = u => `${u.toLowerCase().replace(/\s+/g,'_')}@caicircle.app`;
+const $ = id => document.getElementById(id);
+
+// ── Check invite code ─────────────────────────────────────────────
+const urlCode = new URLSearchParams(window.location.search).get('code');
+
+async function checkCode() {
+  const snap = await getDoc(doc(db,'settings','invite'));
+  const validCode = snap.exists() ? snap.data().code : 'friendsofcai';
+  hide('screen-loading');
+  if (!urlCode || urlCode !== validCode) {
+    show('screen-invalid');
+  } else {
+    show('screen-signup');
+    setTimeout(() => $('s-username').focus(), 100);
+  }
+}
+
+function show(id) { $(id).style.display='flex'; }
+function hide(id) { $(id).style.display='none'; }
+
+checkCode();
+
+// ── Sign up ───────────────────────────────────────────────────────
+$('s-submit').addEventListener('click', doSignUp);
+$('s-confirm').addEventListener('keydown', e => { if(e.key==='Enter') doSignUp(); });
+
+async function doSignUp() {
+  const username = $('s-username').value.trim();
+  const password = $('s-password').value;
+  const confirm  = $('s-confirm').value;
+  const errEl    = $('signup-error');
+  errEl.style.display='none';
+
+  if (!username || username.length < 3) { showErr('Username must be at least 3 characters.'); return; }
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) { showErr('Username can only contain letters, numbers, and underscores.'); return; }
+  if (password.length < 6) { showErr('Password must be at least 6 characters.'); return; }
+  if (password !== confirm) { showErr('Passwords do not match.'); return; }
+
+  $('s-submit').disabled = true;
+  $('s-submit').textContent = 'Creating account…';
+
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, toEmail(username), password);
+    await setDoc(doc(db,'users',cred.user.uid), {
+      username, isAdmin: false, createdAt: serverTimestamp()
+    });
+    hide('signup-form');
+    $('signup-success').style.display='block';
+    $('signup-success').innerHTML = `✓ Account created for <strong>${username}</strong>!<br><br><a href="index.html" style="color:var(--green);font-weight:500">→ Sign in now</a>`;
+  } catch(e) {
+    if (e.code === 'auth/email-already-in-use') showErr('That username is already taken. Please choose another.');
+    else showErr(e.message);
+    $('s-submit').disabled = false;
+    $('s-submit').textContent = 'Create Account';
+  }
+}
+
+function showErr(msg) {
+  const el = $('signup-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>
