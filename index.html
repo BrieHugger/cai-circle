@@ -195,6 +195,7 @@
       <button class="theme-btn" id="theme-btn">☽</button>
       <button class="btn" id="btn-field-report">Field Report</button>
       <button class="btn btn-ghost btn-sm" id="btn-add-vendor">+ Add Vendor</button>
+      <button class="btn btn-ghost btn-sm hidden" id="btn-admin">⚙ Admin</button>
       <button class="btn btn-ghost btn-sm" id="btn-signout">Sign Out</button>
     </div>
   </header>
@@ -298,6 +299,56 @@
   </div>
 </div>
 
+<!-- ADMIN MODAL -->
+<div id="modal-admin" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">⚙ Admin Panel</div>
+      <button class="modal-close" data-close="modal-admin">×</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Create Account -->
+      <div style="margin-bottom:24px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Create Member Account</div>
+        <div id="admin-create-error" class="msg-error hidden"></div>
+        <div id="admin-create-success" class="msg-success hidden"></div>
+        <div class="field-row">
+          <div class="field" style="margin-bottom:0">
+            <label>Username</label>
+            <input id="admin-new-username" type="text" placeholder="new_member" />
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label>Temporary Password</label>
+            <input id="admin-new-password" type="text" placeholder="Share with them" />
+          </div>
+        </div>
+        <button class="btn" style="margin-top:10px" id="admin-create-btn">Create Account</button>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--bdr);margin-bottom:20px">
+
+      <!-- Members List -->
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Members</div>
+        <div id="admin-members-list"><div class="empty" style="padding:16px">Loading…</div></div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:20px 0">
+
+      <!-- Vendor Management -->
+      <div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Vendor Management</div>
+        <div id="admin-vendor-list"><div class="empty" style="padding:16px">Loading…</div></div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close="modal-admin">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- FIELD REPORT MODAL -->
 <div id="modal-field-report" class="modal-backdrop hidden">
   <div class="modal">
@@ -351,7 +402,7 @@
 <!-- FIREBASE + APP LOGIC -->
 <script type="module">
 import { initializeApp }       from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, doc, getDoc, updateDoc, query, orderBy, where, serverTimestamp }
+import { getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, orderBy, where, serverTimestamp }
                                from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
                                from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
@@ -463,8 +514,19 @@ document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => closeMo
 onAuthStateChanged(auth, async user => {
   if (user) {
     currentUser = user;
-    const snap = await getDoc(doc(db,'users',user.uid));
-    currentProfile = snap.exists() ? snap.data() : { username: user.email.split('@')[0], isAdmin:false };
+    const userRef = doc(db,'users',user.uid);
+    const snap = await getDoc(userRef);
+    if (snap.exists()) {
+      currentProfile = snap.data();
+    } else {
+      // First login — create user document
+      const username = user.email.split('@')[0];
+      currentProfile = { username, isAdmin: false, createdAt: serverTimestamp() };
+      await setDoc(userRef, currentProfile);
+    }
+    // Show admin button if admin
+    if (currentProfile.isAdmin) show('btn-admin');
+    else hide('btn-admin');
     showScreen('app');
     loadVendors();
   } else {
@@ -799,6 +861,116 @@ $('fr-submit').onclick = async () => {
 };
 
 showView('list');
+
+// ═══════════════════════════════════════════════════════════════════
+// ADMIN PANEL
+// ═══════════════════════════════════════════════════════════════════
+$('btn-admin').onclick = () => {
+  openModal('modal-admin');
+  loadAdminMembers();
+  loadAdminVendors();
+};
+
+async function loadAdminMembers() {
+  const list = $('admin-members-list');
+  list.innerHTML = '<div class="empty" style="padding:16px">Loading…</div>';
+  const snap = await getDocs(collection(db,'users'));
+  const members = snap.docs.map(d => ({id:d.id,...d.data()}));
+  if (!members.length) { list.innerHTML='<div class="empty" style="padding:16px">No members yet.</div>'; return; }
+  list.innerHTML = members.map(m => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px">
+      <div>
+        <span style="font-weight:500">${m.username||m.id}</span>
+        ${m.isAdmin?'<span style="font-size:10px;background:var(--acc);padding:2px 8px;margin-left:8px">Admin</span>':''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${m.id}',${!!m.isAdmin})">${m.isAdmin?'Remove Admin':'Make Admin'}</button>
+        ${m.id !== currentUser.uid ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteMember('${m.id}','${m.username||m.id}')">Delete</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function loadAdminVendors() {
+  const list = $('admin-vendor-list');
+  list.innerHTML = '<div class="empty" style="padding:16px">Loading…</div>';
+  if (!vendors.length) { list.innerHTML='<div class="empty" style="padding:16px">No vendors yet.</div>'; return; }
+  list.innerHTML = vendors.map(v => {
+    const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px">
+      <div>
+        <span style="font-weight:500">${v.name}</span>
+        <span style="font-size:10px;color:${cat.color};margin-left:8px;text-transform:uppercase">${cat.label}</span>
+        ${v.flagged?'<span style="font-size:10px;color:var(--red);margin-left:8px">⚑ Flagged</span>':''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="adminFlagVendor('${v.id}',${!!v.flagged})">${v.flagged?'Unflag':'Flag'}</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="adminDeleteVendor('${v.id}','${v.name}')">Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleAdmin = async (uid, isAdmin) => {
+  await updateDoc(doc(db,'users',uid), { isAdmin: !isAdmin });
+  loadAdminMembers();
+};
+
+window.deleteMember = async (uid, username) => {
+  if (!confirm(`Delete account for "${username}"? This cannot be undone.`)) return;
+  await deleteDoc(doc(db,'users',uid));
+  loadAdminMembers();
+};
+
+window.adminFlagVendor = async (id, flagged) => {
+  if (!flagged) {
+    const reason = prompt('Reason for flagging:');
+    if (!reason) return;
+    await updateDoc(doc(db,'vendors',id), { flagged: true, flaggedReason: reason });
+    const v = vendors.find(x=>x.id===id);
+    if (v) { v.flagged=true; v.flaggedReason=reason; }
+  } else {
+    await updateDoc(doc(db,'vendors',id), { flagged: false, flaggedReason: null });
+    const v = vendors.find(x=>x.id===id);
+    if (v) { v.flagged=false; v.flaggedReason=null; }
+  }
+  renderGrid();
+  loadAdminVendors();
+};
+
+window.adminDeleteVendor = async (id, name) => {
+  if (!confirm(`Delete "${name}" and all their field reports? This cannot be undone.`)) return;
+  // Delete all reviews for this vendor
+  const rSnap = await getDocs(query(collection(db,'reviews'), where('vendorId','==',id)));
+  await Promise.all(rSnap.docs.map(d => deleteDoc(d.ref)));
+  await deleteDoc(doc(db,'vendors',id));
+  vendors = vendors.filter(v=>v.id!==id);
+  renderGrid();
+  renderMapPins();
+  renderMapSidebar();
+  loadAdminVendors();
+};
+
+$('admin-create-btn').onclick = async () => {
+  const username = $('admin-new-username').value.trim();
+  const password = $('admin-new-password').value.trim();
+  hide('admin-create-error'); hide('admin-create-success');
+  if (!username || !password) { showErr('admin-create-error','Both fields are required.'); return; }
+  if (password.length < 6) { showErr('admin-create-error','Password must be at least 6 characters.'); return; }
+  $('admin-create-btn').disabled = true;
+  try {
+    const { createUserWithEmailAndPassword } = await import("https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js");
+    const cred = await createUserWithEmailAndPassword(auth, toEmail(username), password);
+    await setDoc(doc(db,'users',cred.user.uid), { username, isAdmin: false, createdAt: serverTimestamp() });
+    $('admin-new-username').value = '';
+    $('admin-new-password').value = '';
+    $('admin-create-success').textContent = `✓ Account created for "${username}". Share their username and password with them.`;
+    show('admin-create-success');
+    loadAdminMembers();
+  } catch(e) {
+    showErr('admin-create-error', e.message);
+  }
+  $('admin-create-btn').disabled = false;
+};
 
 // ═══════════════════════════════════════════════════════════════════
 // MAP VIEW
