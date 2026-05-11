@@ -129,7 +129,7 @@
 
     /* Map */
     .map-wrap { display:flex; height:calc(100vh - 54px); }
-    #map { flex:1; min-width:0; z-index:0; }
+    #map { flex:1; min-width:0; min-height:0; z-index:0; }
     .map-sidebar { width:260px; flex-shrink:0; background:var(--surf); border-left:1px solid var(--bdr); overflow-y:auto; display:flex; flex-direction:column; }
     .map-sidebar-head { font-size:10px; font-weight:600; letter-spacing:2px; text-transform:uppercase; color:var(--mut); padding:12px 16px; border-bottom:1px solid var(--bdr); flex-shrink:0; }
     .map-sidebar-item { padding:10px 16px; border-bottom:1px solid var(--bdr); cursor:pointer; transition:background .1s; }
@@ -214,7 +214,13 @@
     <!-- Map View -->
     <div id="view-map" class="hidden">
       <div class="map-wrap">
-        <div id="map"></div>
+        <div id="map">
+          <div style="position:absolute;top:10px;left:10px;z-index:1000;display:flex;gap:4px">
+            <button onclick="setMapTile('light')" id="tile-light" style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Light</button>
+            <button onclick="setMapTile('dark')"  id="tile-dark"  style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Dark</button>
+            <button onclick="setMapTile('sat')"   id="tile-sat"   style="padding:4px 10px;font-size:11px;background:#fff;border:1px solid #ccc;cursor:pointer;font-family:var(--bf)">Satellite</button>
+          </div>
+        </div>
         <div class="map-sidebar">
           <div class="map-sidebar-head" id="map-sidebar-count">All Vendors</div>
           <div id="map-sidebar-list"></div>
@@ -677,12 +683,31 @@ showView('list');
 // MAP VIEW
 // ═══════════════════════════════════════════════════════════════════
 let leafletMap = null;
+let currentTileLayer = null;
+
+const TILES = {
+  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  dark:  'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  sat:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+};
+
+window.setMapTile = function(type) {
+  if (!leafletMap) return;
+  if (currentTileLayer) leafletMap.removeLayer(currentTileLayer);
+  currentTileLayer = L.tileLayer(TILES[type], {
+    attribution: type==='sat' ? '© Esri' : '© OpenStreetMap contributors © CARTO'
+  }).addTo(leafletMap);
+  // Update button styles
+  ['light','dark','sat'].forEach(t => {
+    const btn = document.getElementById(`tile-${t}`);
+    if (btn) btn.style.fontWeight = t===type ? 'bold' : 'normal';
+  });
+};
 
 window.switchView = function(v) {
-  // Hide all views
+  if (v !== 'detail') prevView = v;
   ['list','map','detail'].forEach(n => hide(`view-${n}`));
   show(`view-${v}`);
-  // Toggle header buttons
   $('btn-view-list').classList.toggle('active', v==='list');
   $('btn-view-map').classList.toggle('active', v==='map');
   if (v==='map') initMap();
@@ -695,16 +720,8 @@ function initMap() {
     return;
   }
 
-  const isDark = document.body.classList.contains('dark');
   leafletMap = L.map('map').setView([18.2208, -66.5901], 9);
-
-  L.tileLayer(
-    isDark
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    { attribution: '© OpenStreetMap contributors © CARTO' }
-  ).addTo(leafletMap);
-
+  setMapTile('light');
   renderMapPins();
   renderMapSidebar();
 }
