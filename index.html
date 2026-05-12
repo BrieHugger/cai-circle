@@ -406,7 +406,7 @@
 </div>
 
 <!-- CATEGORY EDIT MODAL -->
-<div id="modal-cat-edit" class="modal-backdrop hidden">
+<div id="modal-cat-edit" class="modal-backdrop hidden" style="z-index:300">
   <div class="modal" style="max-width:420px">
     <div class="modal-header">
       <div class="modal-title">Edit Category</div>
@@ -430,7 +430,7 @@
 </div>
 
 <!-- PV EDIT MODAL -->
-<div id="modal-pv-edit" class="modal-backdrop hidden">
+<div id="modal-pv-edit" class="modal-backdrop hidden" style="z-index:300">
   <div class="modal" style="max-width:360px">
     <div class="modal-header">
       <div class="modal-title">Edit Permaculture Values</div>
@@ -1705,7 +1705,9 @@ async function loadAdminMembers() {
 function renderMemberList(members) {
   const list = $('admin-members-list');
   if (!members.length) { list.innerHTML='<div class="empty" style="padding:16px">No members found.</div>'; return; }
-  list.innerHTML = members.map(m => `
+  list.innerHTML = members.map(m => {
+    const safeUsername = (m.username||m.id).replace(/'/g,"&#39;");
+    return `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px;gap:8px">
       <div>
         <span style="font-weight:500">${m.username||m.id}</span>
@@ -1713,9 +1715,9 @@ function renderMemberList(members) {
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${m.id}',${!!m.isAdmin})">${m.isAdmin?'Remove Admin':'Make Admin'}</button>
-        ${m.id !== currentUser.uid ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteMember('${m.id}','${m.username||m.id}')">Delete</button>` : ''}
+        ${m.id !== currentUser.uid ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteMember('${m.id}','${safeUsername}')">Delete</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`}).join('');
 }
 
 window.filterAdminMembers = function() {
@@ -1733,6 +1735,7 @@ function renderAdminVendorList(vs) {
   if (!vs.length) { list.innerHTML='<div class="empty" style="padding:16px">No vendors found.</div>'; return; }
   list.innerHTML = vs.map(v => {
     const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
+    const safeName = v.name.replace(/'/g,"&#39;");
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px;gap:8px">
       <div style="min-width:0">
         <span style="font-weight:500">${v.name}</span>
@@ -1740,7 +1743,7 @@ function renderAdminVendorList(vs) {
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" onclick="adminEditVendor('${v.id}')">Edit</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="adminDeleteVendor('${v.id}','${v.name}')">Delete</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="adminDeleteVendor('${v.id}','${safeName}')">Delete</button>
       </div>
     </div>`;
   }).join('');
@@ -1752,8 +1755,13 @@ window.filterAdminVendors = function() {
 };
 
 window.toggleAdmin = async (uid, isAdmin) => {
-  await updateDoc(doc(db,'users',uid), { isAdmin: !isAdmin });
-  loadAdminMembers();
+  try {
+    await updateDoc(doc(db,'users',uid), { isAdmin: !isAdmin });
+    loadAdminMembers();
+  } catch(e) {
+    alert('Failed to update admin status: ' + e.message);
+    console.error(e);
+  }
 };
 
 window.deleteMember = async (uid, username) => {
