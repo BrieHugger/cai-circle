@@ -207,9 +207,18 @@
     <!-- List View -->
     <div id="view-list">
       <div class="filter-bar">
-        <input id="search-input" type="text" placeholder="Search vendors…" style="padding:6px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:13px;outline:none;min-width:180px" />
-        <select id="filter-cat">
+        <input id="search-input" type="text" placeholder="Search vendors…" oninput="renderGrid()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:13px;outline:none;min-width:180px" />
+        <select id="filter-cat" onchange="renderGrid()">
           <option value="all">All Categories</option>
+        </select>
+        <select id="filter-tag" onchange="renderGrid()">
+          <option value="all">All Tags</option>
+        </select>
+        <select id="filter-pv" onchange="renderGrid()">
+          <option value="all">Any Values</option>
+          <option value="yes">✓ Permaculture Values</option>
+          <option value="no">✗ No Permaculture Values</option>
+          <option value="unknown">? Unknown</option>
         </select>
         <span class="result-count" id="result-count"></span>
       </div>
@@ -227,6 +236,17 @@
         <div id="detail-flag" class="detail-flag hidden"></div>
         <div class="detail-meta" id="detail-meta"></div>
       </div>
+      <!-- Tags & Permaculture Values section -->
+      <div id="detail-tags-section" style="margin-bottom:16px">
+        <div id="detail-pv-badge"></div>
+        <div id="detail-tags-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+        <div id="detail-add-tag-wrap" style="margin-top:8px;position:relative">
+          <input id="detail-tag-input" type="text" placeholder="+ Add a tag…" autocomplete="off"
+            style="padding:5px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:12px;outline:none;width:180px" />
+          <div id="detail-tag-suggestions" style="position:absolute;top:100%;left:0;width:220px;background:var(--surf);border:1px solid var(--bdr);border-top:none;z-index:10;max-height:160px;overflow-y:auto;display:none"></div>
+        </div>
+      </div>
+
       <!-- Hours section -->
       <div id="detail-hours-section" class="hidden" style="margin-bottom:16px;padding:14px 16px;background:var(--surf);border:1px solid var(--bdr)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -292,6 +312,27 @@
         <select id="av-cat">
           <option value="" disabled selected>Please select a category</option>
         </select>
+      </div>
+
+      <!-- Permaculture Values -->
+      <div class="field">
+        <label>Permaculture Values</label>
+        <div style="display:flex;gap:0;border:1px solid var(--bdr);overflow:hidden;width:fit-content">
+          <button type="button" class="pv-btn active" data-val="unknown" id="pv-unknown" onclick="setPV('unknown')" style="padding:6px 14px;font-size:12px;border:none;background:var(--acc);color:var(--tx);cursor:pointer">Unknown</button>
+          <button type="button" class="pv-btn" data-val="yes" id="pv-yes" onclick="setPV('yes')" style="padding:6px 14px;font-size:12px;border:none;border-left:1px solid var(--bdr);background:transparent;color:var(--mut);cursor:pointer">Yes</button>
+          <button type="button" class="pv-btn" data-val="no" id="pv-no" onclick="setPV('no')" style="padding:6px 14px;font-size:12px;border:none;border-left:1px solid var(--bdr);background:transparent;color:var(--mut);cursor:pointer">No</button>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div class="field">
+        <label>Tags (optional)</label>
+        <div id="av-tags-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
+        <div style="position:relative">
+          <input id="av-tag-input" type="text" placeholder="e.g. organic, barter-accepted, heirloom-seeds…" autocomplete="off" />
+          <div id="av-tag-suggestions" style="position:absolute;top:100%;left:0;right:0;background:var(--surf);border:1px solid var(--bdr);border-top:none;z-index:10;max-height:160px;overflow-y:auto;display:none"></div>
+        </div>
+        <div style="font-size:11px;color:var(--mut);margin-top:4px">Press Enter or comma to add a tag</div>
       </div>
       <div class="field-row">
         <div class="field">
@@ -621,11 +662,130 @@ const showErr = (id,msg) => { $(id).textContent=msg; show(id); };
 const hideErr = id => hide(id);
 
 // ── State ─────────────────────────────────────────────────────────
-let currentUser=null, currentProfile=null, vendors=[], filterCat='all', searchQuery='';
+let currentUser=null, currentProfile=null, vendors=[], filterCat='all';
 let selectedVendor=null, frSelectedVendor=null, frStep=1, frRatings={};
 let leafletMap=null, currentTileLayer=null, currentMapStyle='map';
 let avLat=null, avLng=null, avLocality=null, avPlaceId=null, avHours=null;
+let avTags=[], avPV='unknown';
 let softDuplicateTarget=null;
+
+// ════════════════════════════════════════════════════════════════
+// STARTER TAGS
+// ════════════════════════════════════════════════════════════════
+const STARTER_TAGS = [
+  'organic','biodynamic','regenerative','permaculture','no-till','composting',
+  'rainwater-harvest','solar-powered','off-grid','heirloom-seeds','open-pollinated',
+  'gmo-free','native-plants','rare-varieties','seed-saving','barter-accepted',
+  'sliding-scale','worker-owned','farm-gate-sales','bulk-discounts','donation-based',
+  'offers-classes','apprenticeships','knowledge-sharing','research-based',
+  'usda-organic','naturally-grown','fair-trade','delivers','minimal-packaging',
+  'accepts-returns','english-spanish'
+];
+
+function getAllTags() {
+  const tagSet = new Set(STARTER_TAGS);
+  vendors.forEach(v => (v.tags||[]).forEach(t => tagSet.add(t)));
+  return [...tagSet].sort();
+}
+
+function normalizeTag(t) {
+  return t.toLowerCase().trim().replace(/[^a-z0-9-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+}
+
+function similarTag(input, existing) {
+  // Simple similarity — one is substring of other, or differ by 1-2 chars
+  if (existing.includes(input) || input.includes(existing)) return true;
+  if (Math.abs(input.length - existing.length) > 2) return false;
+  let diff = 0;
+  const a = input.padEnd(existing.length, ' ');
+  const b = existing;
+  for (let i=0; i<b.length; i++) if (a[i]!==b[i]) diff++;
+  return diff <= 2;
+}
+
+// ── Permaculture Values toggle ─────────────────────────────────────
+window.setPV = function(val) {
+  avPV = val;
+  ['unknown','yes','no'].forEach(v => {
+    const btn = $(`pv-${v}`);
+    btn.style.background = v===val ? 'var(--acc)' : 'transparent';
+    btn.style.color      = v===val ? 'var(--tx)' : 'var(--mut)';
+  });
+};
+
+// ── Tag input ─────────────────────────────────────────────────────
+function initTagInput() {
+  const input = $('av-tag-input');
+  const suggestions = $('av-tag-suggestions');
+  if (!input) return;
+
+  input.addEventListener('input', () => {
+    const q = normalizeTag(input.value);
+    if (!q) { suggestions.style.display='none'; return; }
+    const allTags = getAllTags();
+    const matches = allTags.filter(t => t.includes(q) && !avTags.includes(t));
+    // Show similar warning
+    const similar = avTags.filter(t => similarTag(q, t));
+    suggestions.innerHTML = '';
+    if (similar.length) {
+      suggestions.innerHTML += `<div style="padding:6px 12px;font-size:11px;color:var(--amber);border-bottom:1px solid var(--bdr)">⚠ Similar tag already added: ${similar.join(', ')}</div>`;
+    }
+    matches.slice(0,8).forEach(t => {
+      const el = document.createElement('div');
+      el.textContent = t;
+      el.style.cssText='padding:8px 12px;font-size:13px;cursor:pointer';
+      el.onmouseenter = () => el.style.background='var(--surf2)';
+      el.onmouseleave = () => el.style.background='';
+      el.onclick = () => { addTag(t); input.value=''; suggestions.style.display='none'; };
+      suggestions.appendChild(el);
+    });
+    suggestions.style.display = (similar.length || matches.length) ? 'block' : 'none';
+  });
+
+  input.addEventListener('keydown', e => {
+    if (e.key==='Enter' || e.key===',') {
+      e.preventDefault();
+      const t = normalizeTag(input.value);
+      if (t) addTag(t);
+      input.value='';
+      suggestions.style.display='none';
+    }
+    if (e.key==='Escape') suggestions.style.display='none';
+  });
+
+  document.addEventListener('click', e => {
+    if (!input.contains(e.target) && !suggestions.contains(e.target))
+      suggestions.style.display='none';
+  });
+}
+
+function addTag(tag) {
+  const t = normalizeTag(tag);
+  if (!t || avTags.includes(t)) return;
+  avTags.push(t);
+  renderTagChips();
+}
+
+function renderTagChips() {
+  $('av-tags-chips').innerHTML = avTags.map(t => `
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--acc);border:1px solid var(--bdr);font-size:12px">
+      ${t}
+      <button type="button" onclick="removeAvTag('${t}')" style="background:none;border:none;font-size:14px;line-height:1;color:var(--mut);padding:0;cursor:pointer">×</button>
+    </span>`).join('');
+}
+
+window.removeAvTag = function(tag) {
+  avTags = avTags.filter(t=>t!==tag);
+  renderTagChips();
+};
+
+// Update tag filter dropdown whenever vendors load
+function updateTagFilter() {
+  const current = $('filter-tag').value;
+  const allTags = getAllTags().filter(t => vendors.some(v=>(v.tags||[]).includes(t)));
+  $('filter-tag').innerHTML = '<option value="all">All Tags</option>' +
+    allTags.map(t=>`<option value="${t}"${t===current?' selected':''}>${t}</option>`).join('');
+}
 
 const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
@@ -830,6 +990,8 @@ async function loadVendors() {
   vendors = snap.docs.map(d => ({id:d.id,...d.data()}));
   renderGrid();
   renderMapSidebar();
+  updateTagFilter();
+  initTagInput();
 }
 
 // Parse municipality from full address string
@@ -862,32 +1024,47 @@ function starsHtml(n) {
 }
 
 function renderGrid() {
-  const search = $('search-input').value.toLowerCase().trim();
+  const search   = ($('search-input')?.value||'').toLowerCase().trim();
+  const filterTag = $('filter-tag')?.value || 'all';
+  const filterPV  = $('filter-pv')?.value  || 'all';
   const f = vendors.filter(v => {
     if (filterCat !== 'all' && v.category !== filterCat) return false;
+    if (filterTag !== 'all' && !(v.tags||[]).includes(filterTag)) return false;
+    if (filterPV  !== 'all' && (v.permacultureValues||'unknown') !== filterPV) return false;
     if (search && !v.name.toLowerCase().includes(search) &&
-        !(v.locality||'').toLowerCase().includes(search)) return false;
+        !(v.locality||'').toLowerCase().includes(search) &&
+        !(v.tags||[]).some(t=>t.includes(search))) return false;
     return true;
   });
   $('result-count').textContent = `${f.length} vendor${f.length!==1?'s':''}`;
-  if (!f.length) { $('vendor-grid').innerHTML='<div class="empty">No vendors yet — add the first one!</div>'; return; }
+  if (!f.length) { $('vendor-grid').innerHTML='<div class="empty">No vendors match — try adjusting filters.</div>'; return; }
   $('vendor-grid').innerHTML = f.map(v => {
     const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
     const loc = v.locality || parseLocation(v.address);
-    const hasScore = v.avgScore !== undefined && v.avgScore !== null;
+    const hasScore = v.avgScore !== undefined && v.avgScore !== null && v.reviewCount > 0;
     const scoreCol = hasScore ? scoreColor(v.avgScore) : 'var(--mut)';
+    const pv = v.permacultureValues || 'unknown';
+    const pvBadge = pv==='yes' ? '<span style="font-size:10px;background:#e8f5e9;color:#2d5a3d;padding:2px 7px;border:1px solid #b2dfdb;margin-left:6px">🌱 Permaculture</span>'
+                 : pv==='no'  ? '<span style="font-size:10px;background:#fde8e8;color:#8a0000;padding:2px 7px;border:1px solid #f5c0c0;margin-left:6px">✗ Not aligned</span>'
+                 : '';
+    const tags = (v.tags||[]).slice(0,4).map(t=>`<span style="font-size:10px;padding:2px 8px;background:var(--surf2);border:1px solid var(--bdr);color:var(--mut)">${t}</span>`).join('');
+    const moreTags = (v.tags||[]).length > 4 ? `<span style="font-size:10px;color:var(--mut)">+${v.tags.length-4} more</span>` : '';
     return `<div class="vendor-card" data-id="${v.id}">
       <div class="card-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-        <div>
+        <div style="min-width:0">
           <div class="vendor-name">${v.name}</div>
-          <div class="vendor-cat" style="color:${cat.color}">${cat.label}</div>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin-top:3px">
+            <div class="vendor-cat" style="color:${cat.color}">${cat.label}</div>
+            ${pvBadge}
+          </div>
           ${loc?`<div class="vendor-addr">${loc}</div>`:''}
+          ${tags||moreTags ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${tags}${moreTags}</div>` : ''}
         </div>
         <div style="text-align:right;flex-shrink:0">
           ${hasScore
             ? `<div style="font-family:var(--hf);font-size:22px;font-weight:700;color:${scoreCol};line-height:1">${v.avgScore.toFixed(1)}</div>
                <div style="font-size:11px;color:${scoreCol};letter-spacing:1px">${starsHtml(v.avgScore)}</div>
-               <div style="font-size:10px;color:var(--mut)">${v.reviewCount||0} report${(v.reviewCount||0)!==1?'s':''}</div>`
+               <div style="font-size:10px;color:var(--mut)">${v.reviewCount} report${v.reviewCount!==1?'s':''}</div>`
             : `<div style="font-size:11px;color:var(--mut);font-style:italic;margin-top:6px">No reports yet</div>`
           }
         </div>
@@ -900,9 +1077,98 @@ function renderGrid() {
 }
 
 $('filter-cat').onchange = e => { filterCat=e.target.value; renderGrid(); };
-$('search-input').addEventListener('input', () => renderGrid());
 
-window.adminEditVendor = function(id) {
+function renderDetailTags(v) {
+  const isAdmin = currentProfile?.isAdmin;
+  const pv = v.permacultureValues || 'unknown';
+  const pvHtml = pv==='yes' ? '<span style="font-size:12px;background:#e8f5e9;color:#2d5a3d;padding:3px 10px;border:1px solid #b2dfdb">🌱 Strong Permaculture Values</span>'
+               : pv==='no'  ? '<span style="font-size:12px;background:#fde8e8;color:#8a0000;padding:3px 10px;border:1px solid #f5c0c0">✗ Not permaculture aligned</span>'
+               : '<span style="font-size:12px;color:var(--mut);font-style:italic">Permaculture values: unknown</span>';
+
+  $('detail-pv-badge').innerHTML = pvHtml +
+    ` <button class="btn btn-ghost btn-sm" style="font-size:10px;margin-left:6px" onclick="openPVEdit()">edit</button>`;
+
+  const tags = v.tags || [];
+  $('detail-tags-chips').innerHTML = tags.map(t => `
+    <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--surf2);border:1px solid var(--bdr);font-size:12px">
+      ${t}
+      ${isAdmin ? `<button type="button" onclick="removeVendorTag('${t}')" style="background:none;border:none;font-size:14px;line-height:1;color:var(--mut);padding:0;cursor:pointer">×</button>` : ''}
+    </span>`).join('');
+
+  // Init tag input for detail page
+  const input = $('detail-tag-input');
+  const suggestions = $('detail-tag-suggestions');
+  input.oninput = () => {
+    const q = normalizeTag(input.value);
+    if (!q) { suggestions.style.display='none'; return; }
+    const existing = v.tags || [];
+    const matches = getAllTags().filter(t => t.includes(q) && !existing.includes(t));
+    const similar = existing.filter(t => similarTag(q,t));
+    suggestions.innerHTML = '';
+    if (similar.length) suggestions.innerHTML += `<div style="padding:6px 12px;font-size:11px;color:var(--amber)">⚠ Similar: ${similar.join(', ')}</div>`;
+    matches.slice(0,8).forEach(t => {
+      const el = document.createElement('div');
+      el.textContent = t;
+      el.style.cssText='padding:8px 12px;font-size:13px;cursor:pointer';
+      el.onmouseenter=()=>el.style.background='var(--surf2)';
+      el.onmouseleave=()=>el.style.background='';
+      el.onclick=()=>{ addVendorTag(t); input.value=''; suggestions.style.display='none'; };
+      suggestions.appendChild(el);
+    });
+    suggestions.style.display=(similar.length||matches.length)?'block':'none';
+  };
+  input.onkeydown = e => {
+    if (e.key==='Enter'||e.key===',') {
+      e.preventDefault();
+      const t = normalizeTag(input.value);
+      if (t) addVendorTag(t);
+      input.value=''; suggestions.style.display='none';
+    }
+  };
+}
+
+async function addVendorTag(tag) {
+  if (!selectedVendor) return;
+  const t = normalizeTag(tag);
+  if (!t || (selectedVendor.tags||[]).includes(t)) return;
+  const newTags = [...(selectedVendor.tags||[]), t];
+  await updateDoc(doc(db,'vendors',selectedVendor.id), { tags: newTags });
+  selectedVendor.tags = newTags;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v.tags = newTags;
+  renderDetailTags(selectedVendor);
+  updateTagFilter();
+  renderGrid();
+}
+
+window.removeVendorTag = async function(tag) {
+  if (!selectedVendor || !currentProfile?.isAdmin) return;
+  if (!confirm(`Remove tag "${tag}"?`)) return;
+  const newTags = (selectedVendor.tags||[]).filter(t=>t!==tag);
+  await updateDoc(doc(db,'vendors',selectedVendor.id), { tags: newTags });
+  selectedVendor.tags = newTags;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v.tags = newTags;
+  renderDetailTags(selectedVendor);
+  updateTagFilter();
+  renderGrid();
+};
+
+window.openPVEdit = function() {
+  const current = selectedVendor?.permacultureValues || 'unknown';
+  const options = ['yes','no','unknown'];
+  const labels  = {'yes':'Yes — strong permaculture values','no':'No — not aligned','unknown':'Unknown'};
+  const choice = prompt(`Permaculture values for ${selectedVendor.name}?\n\nType: yes, no, or unknown\nCurrent: ${current}`);
+  if (!choice) return;
+  const val = choice.trim().toLowerCase();
+  if (!options.includes(val)) { alert('Please enter: yes, no, or unknown'); return; }
+  updateDoc(doc(db,'vendors',selectedVendor.id), { permacultureValues: val });
+  selectedVendor.permacultureValues = val;
+  const v = vendors.find(x=>x.id===selectedVendor.id);
+  if (v) v.permacultureValues = val;
+  renderDetailTags(selectedVendor);
+  renderGrid();
+};
   const v = vendors.find(x=>x.id===id);
   if (!v) return;
   closeModal('modal-admin');
@@ -981,6 +1247,7 @@ async function openDetail(v) {
   v.flagged ? (flagEl.textContent=`⚑ ${v.flaggedReason||'Flagged'}`, show('detail-flag')) : hide('detail-flag');
   $('detail-meta').innerHTML = renderDetailMeta(v);
   renderHoursSection(v);
+  renderDetailTags(v);
 
   $('detail-reports').innerHTML = '<div class="flex-center mt-16"><span class="spinner"></span></div>';
   const snap = await getDocs(query(collection(db,'reviews'), where('vendorId','==',v.id), orderBy('createdAt','desc')));
@@ -1024,6 +1291,9 @@ $('btn-add-vendor').onclick = () => {
   hideErr('add-vendor-error');
   ['av-name','av-phone','av-website','av-address','av-google-search'].forEach(id => $(id).value='');
   avLat=null; avLng=null; avLocality=null; avPlaceId=null; avHours=null;
+  avTags=[]; avPV='unknown';
+  renderTagChips();
+  setPV('unknown');
   hide('av-coords-status'); hide('av-view-existing'); hide('av-hours-google');
   hide('av-hours-manual'); $('av-hours-rows').innerHTML='';
   $('av-hours-manual-toggle').textContent='+ Add hours manually';
@@ -1174,6 +1444,8 @@ $('av-submit').onclick = async () => {
       locality: avLocality||null,
       lat:      avLat||null,
       lng:      avLng||null,
+      tags:     avTags.length ? avTags : [],
+      permacultureValues: avPV,
       hours:    avHours || collectManualHours() || null,
       placeId:  avPlaceId||null,
       islandTime: avHours ? $('av-island-time-google').checked : $('av-island-time-manual').checked,
