@@ -153,8 +153,25 @@
     .mt-16 { margin-top:20px; }
     .auth-hint { font-size:14px; color:var(--mut); text-align:center; margin-top:20px; line-height:1.6; }
     .admin-tab { padding:14px 22px; font-size:15px; font-weight:500; border:none; background:transparent; color:var(--mut); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; }
-    .admin-tab:hover { color:var(--tx); }
-    .admin-tab.active { color:var(--tx); border-bottom-color:var(--tx); }
+    @media (max-width: 640px) {
+      .header { padding:8px 12px; height:auto; flex-wrap:wrap; gap:6px; }
+      .logo-sub { font-size:10px; }
+      .logo-name { font-size:20px; }
+      .view-toggle button { padding:5px 10px; font-size:12px; }
+      .header-right { gap:5px; flex-wrap:wrap; }
+      .btn { padding:6px 10px; font-size:12px; }
+      .btn-sm { padding:4px 8px; font-size:11px; }
+      .theme-btn { width:30px; height:30px; font-size:15px; }
+      .main { padding:14px 10px; }
+      .vendor-grid { grid-template-columns:1fr; }
+      .map-sidebar { width:100%; max-height:220px; border-left:none; border-top:1px solid var(--bdr); }
+      .modal { max-width:100%; }
+      .modal-backdrop { padding:16px 8px; }
+      .modal-title { font-size:20px; }
+      .field-row { grid-template-columns:1fr; }
+      .detail-name { font-size:28px; }
+      .admin-tab { padding:10px 14px; font-size:13px; }
+    }
   </style>
 </head>
 <body>
