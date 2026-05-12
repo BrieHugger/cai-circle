@@ -152,6 +152,9 @@
     .flex-center { display:flex; align-items:center; justify-content:center; gap:8px; }
     .mt-16 { margin-top:16px; }
     .auth-hint { font-size:12px; color:var(--mut); text-align:center; margin-top:16px; line-height:1.6; }
+    .admin-tab { padding:10px 18px; font-size:13px; font-weight:500; border:none; background:transparent; color:var(--mut); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:all .15s; }
+    .admin-tab:hover { color:var(--tx); }
+    .admin-tab.active { color:var(--tx); border-bottom-color:var(--tx); }
   </style>
 </head>
 <body>
@@ -410,63 +413,89 @@
 
 <!-- ADMIN MODAL -->
 <div id="modal-admin" class="modal-backdrop hidden">
-  <div class="modal" style="max-width:600px">
+  <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <div class="modal-title">⚙ Admin Panel</div>
       <button class="modal-close" data-close="modal-admin">×</button>
     </div>
-    <div class="modal-body">
 
-      <!-- Create Account -->
-      <div style="margin-bottom:24px">
-        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Create Member Account</div>
-        <div id="admin-create-error" class="msg-error hidden"></div>
-        <div id="admin-create-success" class="msg-success hidden"></div>
-        <div class="field-row">
-          <div class="field" style="margin-bottom:0">
-            <label>Username</label>
-            <input id="admin-new-username" type="text" placeholder="new_member" />
+    <!-- Tab buttons -->
+    <div style="display:flex;border-bottom:1px solid var(--bdr);background:var(--surf)">
+      <button class="admin-tab active" id="atab-invite"     onclick="switchAdminTab('invite')">Invite Link</button>
+      <button class="admin-tab"        id="atab-members"    onclick="switchAdminTab('members')">Members</button>
+      <button class="admin-tab"        id="atab-vendors"    onclick="switchAdminTab('vendors')">Vendors</button>
+      <button class="admin-tab"        id="atab-categories" onclick="switchAdminTab('categories')">Categories</button>
+    </div>
+
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+
+      <!-- ── MEMBERS TAB ── -->
+      <div id="admin-tab-members">
+        <div style="margin-bottom:20px">
+          <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Create Member Account</div>
+          <div id="admin-create-error" class="msg-error hidden"></div>
+          <div id="admin-create-success" class="msg-success hidden"></div>
+          <div class="field-row">
+            <div class="field" style="margin-bottom:0">
+              <label>Username</label>
+              <input id="admin-new-username" type="text" placeholder="new_member" />
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label>Temporary Password</label>
+              <input id="admin-new-password" type="text" placeholder="Create a password" />
+            </div>
           </div>
-          <div class="field" style="margin-bottom:0">
-            <label>Temporary Password</label>
-            <input id="admin-new-password" type="text" placeholder="Create a password" />
-          </div>
+          <button class="btn" style="margin-top:10px" id="admin-create-btn">Create Account</button>
         </div>
-        <button class="btn" style="margin-top:10px" id="admin-create-btn">Create Account</button>
-      </div>
-
-      <hr style="border:none;border-top:1px solid var(--bdr);margin-bottom:20px">
-
-      <!-- Members List -->
-      <div>
-        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Members</div>
+        <hr style="border:none;border-top:1px solid var(--bdr);margin-bottom:16px">
+        <div class="field" style="margin-bottom:12px">
+          <input id="admin-member-search" type="text" placeholder="Search members…" oninput="filterAdminMembers()" />
+        </div>
         <div id="admin-members-list"><div class="empty" style="padding:16px">Loading…</div></div>
       </div>
 
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:20px 0">
-
-      <!-- Vendor Management -->
-      <div>
-        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Vendor Management</div>
+      <!-- ── VENDORS TAB ── -->
+      <div id="admin-tab-vendors" class="hidden">
+        <div class="field" style="margin-bottom:12px">
+          <input id="admin-vendor-search" type="text" placeholder="Search vendors…" oninput="filterAdminVendors()" />
+        </div>
         <div id="admin-vendor-list"><div class="empty" style="padding:16px">Loading…</div></div>
       </div>
 
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:20px 0">
+      <!-- ── CATEGORIES TAB ── -->
+      <div id="admin-tab-categories" class="hidden">
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Add New Category</div>
+        <div id="admin-cat-error" class="msg-error hidden"></div>
+        <div id="admin-cat-success" class="msg-success hidden"></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+          <div class="field" style="margin-bottom:0;flex:1;min-width:140px">
+            <label>Category Name</label>
+            <input id="admin-cat-name" type="text" placeholder="e.g. Tools & Equipment" />
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label>Color</label>
+            <div id="admin-cat-palette" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"></div>
+          </div>
+          <button class="btn btn-sm" style="height:36px;align-self:flex-end" onclick="addCategory()">Add Category</button>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--bdr);margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Current Categories</div>
+        <div id="admin-cat-list"></div>
+      </div>
 
-      <!-- Invite Link -->
-      <div>
-        <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--mut);margin-bottom:12px">Invite Link</div>
+      <!-- ── INVITE LINK TAB ── -->
+      <div id="admin-tab-invite" class="hidden">
         <div id="admin-invite-error" class="msg-error hidden"></div>
         <div id="admin-invite-success" class="msg-success hidden"></div>
-        <div style="font-size:13px;color:var(--mut);margin-bottom:10px">Share this link with new members to let them create an account:</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:var(--surf2);border:1px solid var(--bdr);padding:10px 12px">
-          <span style="font-size:12px;color:var(--mut);flex-shrink:0">briehugger.github.io/cai-circle/join.html?code=</span>
+        <div style="font-size:13px;color:var(--mut);margin-bottom:10px">Share this link with new members:</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;background:var(--surf2);border:1px solid var(--bdr);padding:10px 12px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--mut);flex-shrink:0">…/join.html?code=</span>
           <span id="admin-invite-current" style="font-size:12px;font-weight:600;color:var(--tx)">loading…</span>
-          <button class="btn btn-ghost btn-sm" style="margin-left:auto;flex-shrink:0" onclick="copyInviteLink()">Copy Link</button>
+          <button class="btn btn-ghost btn-sm" style="margin-left:auto;flex-shrink:0" onclick="copyInviteLink()">Copy Full Link</button>
         </div>
-        <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-bottom:6px">Change invite code</div>
+        <div style="font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-bottom:8px">Change invite code</div>
         <div style="display:flex;gap:8px;align-items:center">
-          <span style="font-size:12px;color:var(--mut);white-space:nowrap">join.html?code=</span>
+          <span style="font-size:12px;color:var(--mut);white-space:nowrap">?code=</span>
           <input id="admin-invite-new" type="text" placeholder="newcode" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--bdr);color:var(--tx);font-size:13px;outline:none" />
           <button class="btn btn-sm" onclick="changeInviteCode()">Update</button>
         </div>
@@ -873,15 +902,29 @@ function renderGrid() {
 $('filter-cat').onchange = e => { filterCat=e.target.value; renderGrid(); };
 $('search-input').addEventListener('input', () => renderGrid());
 
-// ── Render detail meta with fillable empty fields ─────────────────
+window.adminEditVendor = function(id) {
+  const v = vendors.find(x=>x.id===id);
+  if (!v) return;
+  closeModal('modal-admin');
+  openDetail(v);
+};
+
+// ── Render detail meta with fillable/editable fields ──────────────
 function renderDetailMeta(v) {
+  const isAdmin = currentProfile?.isAdmin;
   const fields = [
     { key:'phone',   label:'Phone',   val:v.phone },
     { key:'website', label:'Website', val:v.website },
     { key:'address', label:'Address', val:v.address },
   ];
   return fields.map(f => {
-    if (f.val) return `<span>${f.val}</span>`;
+    if (f.val) {
+      // Admins can edit existing values; members can only see them
+      if (isAdmin) {
+        return `<span>${f.val} <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 6px;color:var(--mut)" onclick="openFillIn('${f.key}','${f.label}',true)">edit</button></span>`;
+      }
+      return `<span>${f.val}</span>`;
+    }
     return `<span><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;color:var(--mut)" onclick="openFillIn('${f.key}','${f.label}')">+ Add ${f.label}</button></span>`;
   }).join('');
 }
@@ -889,13 +932,15 @@ function renderDetailMeta(v) {
 // Fill-in state
 let fillInField = null, fillInLabel = null;
 
-window.openFillIn = function(field, label) {
+window.openFillIn = function(field, label, isEdit=false) {
   fillInField = field; fillInLabel = label;
-  $('fillin-label').textContent = `Add ${label}`;
-  $('fillin-input').value = '';
+  $('fillin-label').textContent = isEdit ? `Edit ${label}` : `Add ${label}`;
+  $('fillin-input').value = isEdit ? (selectedVendor?.[field] || '') : '';
   $('fillin-input').placeholder = label;
   hide('fillin-confirm-section');
   hide('fillin-error');
+  hide('fillin-save-btn');
+  show('fillin-preview-btn');
   show('modal-fillin');
   setTimeout(() => $('fillin-input').focus(), 100);
 };
@@ -1270,48 +1315,86 @@ showView('list');
 // ═══════════════════════════════════════════════════════════════════
 $('btn-admin').onclick = () => {
   openModal('modal-admin');
-  loadAdminMembers();
-  loadAdminVendors();
-  loadInviteCode();
+  switchAdminTab('invite');
+};
+
+// ── Color palette for categories ──────────────────────────────────
+const CAT_PALETTE = [
+  '#2d5a3d','#5a8a3d','#3d7a5a','#1e3d5a','#2d4a7a',
+  '#5a3d7a','#7a3d5a','#5a3d1e','#7a5a1e','#8a4a2a',
+  '#6b4a8a','#3d6b8a','#8a6b2a','#4a8a6b','#8a3d3d',
+  '#555555','#3d5555','#6b4a4a','#4a6b4a','#4a4a6b',
+];
+let selectedCatColor = CAT_PALETTE[0];
+let allMembers = [], allAdminVendors = [];
+
+window.switchAdminTab = function(tab) {
+  ['members','vendors','categories','invite'].forEach(t => {
+    $(`admin-tab-${t}`).classList.toggle('hidden', t!==tab);
+    $(`atab-${t}`).classList.toggle('active', t===tab);
+  });
+  if (tab==='members')    loadAdminMembers();
+  if (tab==='vendors')    loadAdminVendors();
+  if (tab==='categories') loadAdminCategories();
+  if (tab==='invite')     loadInviteCode();
 };
 
 async function loadAdminMembers() {
   const list = $('admin-members-list');
   list.innerHTML = '<div class="empty" style="padding:16px">Loading…</div>';
   const snap = await getDocs(collection(db,'users'));
-  const members = snap.docs.map(d => ({id:d.id,...d.data()}));
-  if (!members.length) { list.innerHTML='<div class="empty" style="padding:16px">No members yet.</div>'; return; }
+  allMembers = snap.docs.map(d => ({id:d.id,...d.data()}));
+  renderMemberList(allMembers);
+}
+
+function renderMemberList(members) {
+  const list = $('admin-members-list');
+  if (!members.length) { list.innerHTML='<div class="empty" style="padding:16px">No members found.</div>'; return; }
   list.innerHTML = members.map(m => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px;gap:8px">
       <div>
         <span style="font-weight:500">${m.username||m.id}</span>
-        ${m.isAdmin?'<span style="font-size:10px;background:var(--acc);padding:2px 8px;margin-left:8px">Admin</span>':''}
+        ${m.isAdmin?'<span style="font-size:10px;background:var(--acc);padding:2px 8px;margin-left:8px;border:1px solid var(--bdr)">Admin</span>':''}
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:6px;flex-shrink:0">
         <button class="btn btn-ghost btn-sm" onclick="toggleAdmin('${m.id}',${!!m.isAdmin})">${m.isAdmin?'Remove Admin':'Make Admin'}</button>
         ${m.id !== currentUser.uid ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteMember('${m.id}','${m.username||m.id}')">Delete</button>` : ''}
       </div>
     </div>`).join('');
 }
 
+window.filterAdminMembers = function() {
+  const q = $('admin-member-search').value.toLowerCase();
+  renderMemberList(allMembers.filter(m => (m.username||'').toLowerCase().includes(q)));
+};
+
 async function loadAdminVendors() {
+  allAdminVendors = [...vendors];
+  renderAdminVendorList(allAdminVendors);
+}
+
+function renderAdminVendorList(vs) {
   const list = $('admin-vendor-list');
-  list.innerHTML = '<div class="empty" style="padding:16px">Loading…</div>';
-  if (!vendors.length) { list.innerHTML='<div class="empty" style="padding:16px">No vendors yet.</div>'; return; }
-  list.innerHTML = vendors.map(v => {
+  if (!vs.length) { list.innerHTML='<div class="empty" style="padding:16px">No vendors found.</div>'; return; }
+  list.innerHTML = vs.map(v => {
     const cat = CATEGORIES.find(c=>c.id===v.category)||{label:v.category,color:'#888'};
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px">
-      <div>
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--bdr);font-size:13px;gap:8px">
+      <div style="min-width:0">
         <span style="font-weight:500">${v.name}</span>
         <span style="font-size:10px;color:${cat.color};margin-left:8px;text-transform:uppercase">${cat.label}</span>
-        ${v.flagged?'<span style="font-size:10px;color:var(--red);margin-left:8px">⚑ Flagged</span>':''}
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button class="btn btn-ghost btn-sm" onclick="adminEditVendor('${v.id}')">Edit</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="adminDeleteVendor('${v.id}','${v.name}')">Delete</button>
       </div>
     </div>`;
   }).join('');
 }
+
+window.filterAdminVendors = function() {
+  const q = $('admin-vendor-search').value.toLowerCase();
+  renderAdminVendorList(allAdminVendors.filter(v => v.name.toLowerCase().includes(q)));
+};
 
 window.toggleAdmin = async (uid, isAdmin) => {
   await updateDoc(doc(db,'users',uid), { isAdmin: !isAdmin });
@@ -1326,14 +1409,11 @@ window.deleteMember = async (uid, username) => {
 
 window.adminDeleteVendor = async (id, name) => {
   if (!confirm(`Delete "${name}" and all their field reports? This cannot be undone.`)) return;
-  // Delete all reviews for this vendor
   const rSnap = await getDocs(query(collection(db,'reviews'), where('vendorId','==',id)));
   await Promise.all(rSnap.docs.map(d => deleteDoc(d.ref)));
   await deleteDoc(doc(db,'vendors',id));
   vendors = vendors.filter(v=>v.id!==id);
-  renderGrid();
-  renderMapPins();
-  renderMapSidebar();
+  renderGrid(); renderMapPins(); renderMapSidebar();
   loadAdminVendors();
 };
 
@@ -1350,23 +1430,86 @@ $('admin-create-btn').onclick = async () => {
     await setDoc(doc(db,'users',cred.user.uid), { username, isAdmin: false, createdAt: serverTimestamp() });
     $('admin-new-username').value = '';
     $('admin-new-password').value = '';
-    $('admin-create-success').textContent = `✓ Account created for "${username}". Share their username and password with them.`;
+    $('admin-create-success').textContent = `✓ Account created for "${username}".`;
     show('admin-create-success');
     loadAdminMembers();
-  } catch(e) {
-    showErr('admin-create-error', e.message);
-  }
+  } catch(e) { showErr('admin-create-error', e.message); }
   $('admin-create-btn').disabled = false;
 };
+
+// ── Category Management ───────────────────────────────────────────
+function loadAdminCategories() {
+  $('admin-cat-palette').innerHTML = CAT_PALETTE.map(c => `
+    <div onclick="selectCatColor('${c}')" id="cp-${c.replace('#','')}"
+      style="width:24px;height:24px;background:${c};cursor:pointer;border-radius:3px;border:2px solid ${c===selectedCatColor?'var(--tx)':'transparent'};transition:border .1s"></div>
+  `).join('');
+  renderAdminCatList();
+}
+
+window.selectCatColor = function(color) {
+  selectedCatColor = color;
+  CAT_PALETTE.forEach(c => {
+    const el = document.getElementById(`cp-${c.replace('#','')}`);
+    if (el) el.style.borderColor = c===color ? 'var(--tx)' : 'transparent';
+  });
+};
+
+function renderAdminCatList() {
+  $('admin-cat-list').innerHTML = CATEGORIES.map((cat, i) => `
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bdr)">
+      <div style="width:18px;height:18px;background:${cat.color};border-radius:3px;flex-shrink:0"></div>
+      <span style="flex:1;font-size:13px;font-weight:500">${cat.label}</span>
+      <button class="btn btn-ghost btn-sm" onclick="editCategory(${i})" style="font-size:11px">Edit</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);font-size:11px" onclick="deleteCategory(${i})">Delete</button>
+    </div>`).join('');
+}
+
+window.addCategory = function() {
+  const name = $('admin-cat-name').value.trim();
+  hide('admin-cat-error'); hide('admin-cat-success');
+  if (!name) { showErr('admin-cat-error','Category name is required.'); return; }
+  if (CATEGORIES.find(c=>c.label.toLowerCase()===name.toLowerCase())) { showErr('admin-cat-error','That category already exists.'); return; }
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  CATEGORIES.push({ id, label:name, color:selectedCatColor });
+  $('admin-cat-name').value = '';
+  refreshCatDropdowns();
+  $('admin-cat-success').textContent = `✓ "${name}" added.`;
+  show('admin-cat-success');
+  setTimeout(()=>hide('admin-cat-success'),2000);
+  renderAdminCatList();
+  renderGrid();
+};
+
+window.deleteCategory = function(i) {
+  const cat = CATEGORIES[i];
+  if (!confirm(`Delete category "${cat.label}"?`)) return;
+  CATEGORIES.splice(i,1);
+  refreshCatDropdowns();
+  renderAdminCatList();
+  renderGrid();
+};
+
+window.editCategory = function(i) {
+  const cat = CATEGORIES[i];
+  const newName = prompt('Edit category name:', cat.label);
+  if (!newName || newName.trim()===cat.label) return;
+  CATEGORIES[i].label = newName.trim();
+  refreshCatDropdowns();
+  renderAdminCatList();
+  renderGrid();
+};
+
+function refreshCatDropdowns() {
+  $('filter-cat').innerHTML = '<option value="all">All Categories</option>' + CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+  $('av-cat').innerHTML = '<option value="" disabled selected>Please select a category</option>' + CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+}
 
 // ── Invite Link ───────────────────────────────────────────────────
 async function loadInviteCode() {
   const snap = await getDoc(doc(db,'settings','invite'));
   const code = snap.exists() ? snap.data().code : 'friendsofcai';
   $('admin-invite-current').textContent = code;
-  if (!snap.exists()) {
-    await setDoc(doc(db,'settings','invite'), { code });
-  }
+  if (!snap.exists()) await setDoc(doc(db,'settings','invite'), { code });
 }
 
 window.copyInviteLink = function() {
