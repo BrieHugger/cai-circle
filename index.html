@@ -1169,6 +1169,8 @@ window.openPVEdit = function() {
   renderDetailTags(selectedVendor);
   renderGrid();
 };
+
+window.adminEditVendor = function(id) {
   const v = vendors.find(x=>x.id===id);
   if (!v) return;
   closeModal('modal-admin');
