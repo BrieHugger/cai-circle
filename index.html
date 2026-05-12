@@ -405,6 +405,30 @@
   </div>
 </div>
 
+<!-- CATEGORY EDIT MODAL -->
+<div id="modal-cat-edit" class="modal-backdrop hidden">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Edit Category</div>
+      <button class="modal-close" onclick="hideModal('modal-cat-edit')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Category Name</label>
+        <input id="cat-edit-name" type="text" placeholder="Category name" />
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div id="cat-edit-palette" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="hideModal('modal-cat-edit')">Cancel</button>
+      <button class="btn" onclick="saveCategoryEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- PV EDIT MODAL -->
 <div id="modal-pv-edit" class="modal-backdrop hidden">
   <div class="modal" style="max-width:360px">
@@ -1820,14 +1844,42 @@ window.deleteCategory = function(i) {
   renderGrid();
 };
 
+let editingCatIndex = -1;
+let editingCatColor = CAT_PALETTE[0];
+
 window.editCategory = function(i) {
-  const cat = CATEGORIES[i];
-  const newName = prompt('Edit category name:', cat.label);
-  if (!newName || newName.trim()===cat.label) return;
-  CATEGORIES[i].label = newName.trim();
+  editingCatIndex = i;
+  editingCatColor = CATEGORIES[i].color;
+  $('cat-edit-name').value = CATEGORIES[i].label;
+
+  // Build palette
+  $('cat-edit-palette').innerHTML = CAT_PALETTE.map(c => `
+    <div onclick="selectEditCatColor('${c}')" id="ecp-${c.replace('#','')}"
+      style="width:24px;height:24px;background:${c};cursor:pointer;border-radius:3px;border:2px solid ${c===editingCatColor?'var(--tx)':'transparent'};transition:border .1s"></div>
+  `).join('');
+
+  show('modal-cat-edit');
+  setTimeout(() => $('cat-edit-name').focus(), 100);
+};
+
+window.selectEditCatColor = function(color) {
+  editingCatColor = color;
+  CAT_PALETTE.forEach(c => {
+    const el = document.getElementById(`ecp-${c.replace('#','')}`);
+    if (el) el.style.borderColor = c===color ? 'var(--tx)' : 'transparent';
+  });
+};
+
+window.saveCategoryEdit = function() {
+  const name = $('cat-edit-name').value.trim();
+  if (!name) return;
+  CATEGORIES[editingCatIndex].label = name;
+  CATEGORIES[editingCatIndex].color = editingCatColor;
+  hideModal('modal-cat-edit');
   refreshCatDropdowns();
   renderAdminCatList();
   renderGrid();
+  renderMapPins();
 };
 
 function refreshCatDropdowns() {
